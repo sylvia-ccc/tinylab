@@ -1,0 +1,1009 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TinyLab · 小模型训练实验室</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2; --surface-1: #fcfcfb; --surface-2: #efefec; --border: #dcdbd6;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #8a8984;
+  --grid: #e6e5e1; --accent: #2a78d6;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --seq-0: #f7fafe; --seq-1: #cde2fb; --seq-2: #86b6ef; --seq-3: #3987e5; --seq-4: #1c5cab; --seq-5: #0d366b;
+  --good: #0a7d32; --warn: #b26b00; --bad: #c4302b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #111110; --surface-1: #1a1a19; --surface-2: #232321; --border: #34342f;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --grid: #2a2a27; --accent: #3987e5;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
+    --seq-0: #1a1a19; --seq-1: #104281; --seq-2: #1c5cab; --seq-3: #3987e5; --seq-4: #86b6ef; --seq-5: #e6f0fd;
+    --good: #3fb950; --warn: #d29922; --bad: #f0605a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; background: var(--bg); color: var(--text-primary); }
+header { display: flex; align-items: center; gap: 16px; padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--surface-1); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 16px; margin: 0; font-weight: 650; }
+header .sub { color: var(--text-secondary); font-size: 12px; }
+.layout { display: grid; grid-template-columns: 290px 1fr; min-height: calc(100vh - 50px); }
+aside { border-right: 1px solid var(--border); background: var(--surface-1); padding: 12px; overflow-y: auto; max-height: calc(100vh - 50px); position: sticky; top: 50px; }
+main { padding: 16px 24px 60px; min-width: 0; }
+button { font: inherit; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.danger { color: var(--bad); }
+input, select, textarea { font: inherit; color: var(--text-primary); background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+.run { border: 1px solid transparent; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; cursor: pointer; display: grid; grid-template-columns: 16px 1fr; gap: 8px; align-items: start; }
+.run:hover { background: var(--surface-2); }
+.run.active { border-color: var(--accent); background: var(--surface-2); }
+.run .name { font-weight: 600; word-break: break-all; }
+.run .meta { font-size: 12px; color: var(--text-secondary); }
+.swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; vertical-align: -1px; }
+.pill { display: inline-block; font-size: 11px; padding: 0 7px; border-radius: 10px; border: 1px solid var(--border); color: var(--text-secondary); }
+.pill.running, .pill.preparing { color: var(--accent); border-color: var(--accent); }
+.pill.done { color: var(--good); border-color: var(--good); }
+.pill.failed, .pill.stale { color: var(--bad); border-color: var(--bad); }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 16px; flex-wrap: wrap; }
+.tab { padding: 8px 14px; cursor: pointer; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab.active { color: var(--text-primary); border-bottom-color: var(--accent); font-weight: 600; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+.card h3 { margin: 0 0 2px; font-size: 14px; font-weight: 650; }
+.card .why { color: var(--text-secondary); font-size: 12px; margin: 0 0 10px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+.tile .k { font-size: 12px; color: var(--text-secondary); }
+.tile .v { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tile .d { font-size: 11px; color: var(--text-muted); }
+.pipeline { display: flex; gap: 0; align-items: stretch; margin-bottom: 16px; overflow-x: auto; }
+.stage { flex: 1; min-width: 150px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+.stage:hover { border-color: var(--accent); }
+.stage .t { font-weight: 650; }
+.stage .n { color: var(--text-muted); font-size: 11px; }
+.stage .x { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+.arrow { align-self: center; padding: 0 6px; color: var(--text-muted); }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.chart text { fill: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+.tip { position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; z-index: 10; display: none; }
+.tip b { font-variant-numeric: tabular-nums; }
+.toks { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 2; white-space: pre-wrap; word-break: break-all; }
+.toks span { border-radius: 3px; padding: 1px 0; margin-right: 1px; box-shadow: inset 0 0 0 1px var(--border); }
+.mono { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; white-space: pre-wrap; word-break: break-word; background: var(--surface-2); border-radius: 6px; padding: 10px; margin: 0; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.muted { color: var(--text-muted); }
+.sec { color: var(--text-secondary); }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--grid); }
+th { color: var(--text-secondary); font-weight: 600; }
+td.diff { background: color-mix(in srgb, var(--s4) 18%, transparent); }
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; z-index: 20; }
+.modal { background: var(--surface-1); border-radius: 12px; padding: 18px 22px; width: min(760px, 94vw); max-height: 90vh; overflow-y: auto; }
+.form { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 14px; }
+.form label { font-size: 12px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 2px; }
+.empty { color: var(--text-muted); padding: 30px; text-align: center; }
+canvas.heat { image-rendering: pixelated; width: 100%; max-width: 440px; border-radius: 4px; display: block; margin: 0 auto; }
+.hint { background: color-mix(in srgb, var(--accent) 9%, transparent); border-left: 3px solid var(--accent); padding: 8px 12px; border-radius: 4px; font-size: 13px; color: var(--text-secondary); margin-bottom: 14px; }
+.gen span.tk { cursor: default; border-radius: 3px; }
+.gen span.tk:hover { outline: 1px solid var(--accent); }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  aside { position: static; max-height: 260px; border-right: 0; border-bottom: 1px solid var(--border); }
+  header .sub:not(#device) { display: none; }
+  header h1 { font-size: 14px; }
+  .grid { grid-template-columns: 1fr; }
+  main { padding: 12px; }
+  .form { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>TinyLab · 小模型训练实验室</h1>
+  <span class="sub" id="device"></span>
+  <span style="flex:1"></span>
+  <span class="sub">左栏勾选多个实验可叠加对比</span>
+  <button class="primary" onclick="openNew()">＋ 新实验</button>
+</header>
+<div class="layout">
+  <aside><div id="runs"></div></aside>
+  <main>
+    <div class="tabs" id="tabs"></div>
+    <div id="view"><div class="empty">左侧还没有实验。点右上角「新实验」开始第一次训练。</div></div>
+  </main>
+</div>
+<div class="tip" id="tip"></div>
+
+<div class="modal-bg" id="newModal" onclick="if(event.target===this)closeNew()">
+  <div class="modal">
+    <h3 style="margin-top:0">新实验</h3>
+    <div class="row" id="modeSel"></div><div class="muted" id="modeHint" style="margin:-4px 0 10px;font-size:12.5px"></div>
+    <div class="hint">科学家的习惯：先写下<b>假设</b>（你预计会看到什么），再训练，最后对照结果写<b>结论</b>。改一个变量、留一个对照组。</div>
+    <div class="row"><label>从预设开始 <select id="presetSel" onchange="fillPreset()"></select></label>
+      <label>实验名 <input id="f_name" placeholder="留空自动命名"></label></div>
+    <label class="sec" style="font-size:12px">假设<textarea id="f_hypothesis" rows="2" style="width:100%"></textarea></label>
+    <div class="form" id="form" style="margin-top:10px"></div>
+    <div class="row" style="margin-top:14px;justify-content:flex-end">
+      <span class="muted" id="newErr"></span>
+      <button onclick="closeNew()">取消</button><button class="primary" onclick="submitNew()">开始训练</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ------------------------------------------------------------------ 状态
+const S = { runs: [], focus: null, compare: new Set(), tab: 'overview', meta: null, cache: {}, snapStep: null, layer: 0, head: 0 };
+const SERIES = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'];
+const colorOf = {}; let colorNext = 0;   // 颜色跟随实验本身，不随排序变化
+function runColor(name) { if (!(name in colorOf)) colorOf[name] = SERIES[colorNext++ % 8]; return `var(${colorOf[name]})`; }
+const $ = id => document.getElementById(id);
+const api = (p, body) => fetch(p, body ? { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) } : {}).then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j; });
+const fmt = (v, d = 3) => v == null || isNaN(v) ? '–' : Math.abs(v) >= 1e6 ? (v/1e6).toFixed(2)+'M' : Math.abs(v) >= 1e4 ? (v/1e3).toFixed(1)+'k' : Math.abs(v) < 1e-3 && v !== 0 ? v.toExponential(1) : trimZ((+v).toFixed(d));
+const trimZ = t => t.includes('.') ? t.replace(/\.?0+$/, '') : t;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const vis = s => esc(s).replace(/\n/g, '↵\n').replace(/\t/g, '→').replace(/ /g, '·');
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+// ------------------------------------------------------------------ 图表：折线（带十字准线 + 提示框）
+function lineChart(el, { series, logY = false, logX = false, yLabel = '', xLabel = '步数', height = 220, yFmt = v => fmt(v, 3), smooth = 0, refLine = null }) {
+  el.classList.add('chart');
+  series = series.filter(s => s.points.length);
+  if (!series.length) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+  if (smooth) series = series.map(s => { let m = null; return { ...s, points: s.points.map(([x, y]) => [x, m = m == null ? y : m * smooth + y * (1 - smooth)]), raw: s.points }; });
+  const W = el.clientWidth || 500, H = height, L = 52, R = 12, T = 22, B = 30;
+  const xs = series.flatMap(s => s.points.map(p => p[0])), ys = series.flatMap(s => s.points.map(p => p[1])).filter(v => isFinite(v) && (!logY || v > 0));
+  let [x0, x1] = [Math.min(...xs), Math.max(...xs)]; if (x0 === x1) x1 = x0 + 1;
+  if (logX) x0 = Math.max(1, x0);
+  let [y0, y1] = [Math.min(...ys), Math.max(...ys)];
+  if (refLine != null) { y0 = Math.min(y0, refLine); y1 = Math.max(y1, refLine); }
+  let ticksY = [];
+  if (logY) {
+    y0 = Math.log10(y0); y1 = Math.log10(y1); const p = (y1 - y0) * .06 || .5; y0 -= p; y1 += p;
+    for (let e = Math.ceil(y0); e <= Math.floor(y1); e++) ticksY.push(10 ** e);
+    if (ticksY.length < 2) ticksY = [10 ** y0, 10 ** ((y0 + y1) / 2), 10 ** y1];
+  } else {
+    if (y0 === y1) { y0 -= 1; y1 += 1; }
+    const step = niceStep((y1 - y0) / 4);
+    const lo = Math.floor(y0 / step) * step, hi = Math.ceil(y1 / step) * step;
+    y0 = lo; y1 = hi;
+    for (let v = lo; v <= hi + step / 2; v += step) ticksY.push(+v.toPrecision(10));
+  }
+  const tx = x => L + (W - L - R) * ((logX ? Math.log10(Math.max(x,1)) - Math.log10(x0) : x - x0) / (logX ? Math.log10(x1) - Math.log10(x0) : x1 - x0));
+  const ty = y => T + (H - T - B) * (1 - ((logY ? Math.log10(y) : y) - y0) / (y1 - y0));
+  const ticksX = [];
+  if (logX) { for (let e = Math.ceil(Math.log10(x0)); e <= Math.floor(Math.log10(x1)); e++) ticksX.push(10 ** e); }
+  else { const st = niceStep((x1 - x0) / 5); for (let v = Math.ceil(x0 / st) * st; v <= x1 + 1e-9; v += st) ticksX.push(v); }
+  let svg = `<svg viewBox="0 0 ${W} ${H}" height="${H}">`;
+  ticksY.forEach(v => svg += `<line x1="${L}" x2="${W - R}" y1="${ty(v)}" y2="${ty(v)}" stroke="var(--grid)"/><text x="${L - 6}" y="${ty(v) + 4}" text-anchor="end">${yFmt(v)}</text>`);
+  ticksX.forEach(v => svg += `<text x="${tx(v)}" y="${H - 10}" text-anchor="middle">${Math.abs(v) >= 10 || Number.isInteger(+v.toPrecision(10)) ? fmt(Math.round(v), 0) : trimZ(v.toFixed(2))}</text>`);
+  svg += `<line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="var(--border)"/>`;
+  if (refLine != null) svg += `<line x1="${L}" x2="${W - R}" y1="${ty(refLine)}" y2="${ty(refLine)}" stroke="var(--text-muted)" stroke-dasharray="4 4"/>`;
+  if (yLabel) svg += `<text x="4" y="10" text-anchor="start" style="font-weight:600">${esc(yLabel)}</text>`;
+  series.forEach(s => {
+    const pts = s.points.filter(p => isFinite(p[1]) && (!logY || p[1] > 0));
+    svg += `<path d="${pts.map((p, i) => (i ? 'L' : 'M') + tx(p[0]).toFixed(1) + ' ' + ty(p[1]).toFixed(1)).join('')}" fill="none" stroke="${s.color}" stroke-width="${s.width || 2}" ${s.dash ? `stroke-dasharray="${s.dash}"` : ''} stroke-linejoin="round" stroke-linecap="round" opacity="${s.opacity || 1}"/>`;
+  });
+  svg += `<line id="xh" y1="${T}" y2="${H - B}" stroke="var(--text-muted)" style="display:none"/><g id="dots"></g></svg>`;
+  const legend = series.length > 1 ? `<div class="legend">${series.map(s => `<span><span class="swatch" style="background:${s.color};${s.dash ? 'opacity:.6' : ''}"></span> ${esc(s.name)}</span>`).join('')}</div>` : '';
+  el.innerHTML = legend + svg;
+  const sv = el.querySelector('svg'), xh = sv.querySelector('#xh'), dots = sv.querySelector('#dots'), tip = $('tip');
+  sv.onmousemove = e => {
+    const r = sv.getBoundingClientRect(), mx = (e.clientX - r.left) * W / r.width;
+    if (mx < L) return;
+    const rows = [];
+    let gx = null, dh = '';
+    series.forEach(s => {
+      let best = null; for (const p of s.points) if (!best || Math.abs(tx(p[0]) - mx) < Math.abs(tx(best[0]) - mx)) best = p;
+      if (!best || !isFinite(best[1]) || (logY && best[1] <= 0)) return;
+      gx = gx ?? best[0];
+      dh += `<circle cx="${tx(best[0])}" cy="${ty(best[1])}" r="4" fill="${s.color}" stroke="var(--surface-1)" stroke-width="2"/>`;
+      rows.push(`<span class="swatch" style="background:${s.color}"></span> ${esc(s.name)} <b>${yFmt(best[1])}</b>`);
+    });
+    if (gx == null) return;
+    xh.setAttribute('x1', tx(gx)); xh.setAttribute('x2', tx(gx)); xh.style.display = '';
+    dots.innerHTML = dh;
+    tip.innerHTML = `<div class="muted">${xLabel} ${fmt(gx, 0)}</div>` + rows.join('<br>');
+    showTip(e);
+  };
+  sv.onmouseleave = () => { xh.style.display = 'none'; dots.innerHTML = ''; tip.style.display = 'none'; };
+}
+function niceStep(r) { const e = 10 ** Math.floor(Math.log10(r)), f = r / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e; }
+function showTip(e) { const tip = $('tip'); tip.style.display = 'block'; const w = tip.offsetWidth; tip.style.left = Math.min(e.pageX + 14, window.scrollX + innerWidth - w - 10) + 'px'; tip.style.top = (e.pageY + 14) + 'px'; }
+function hideTip() { $('tip').style.display = 'none'; }
+
+// 横向条形图
+function barChart(el, rows, { valFmt = v => fmt(v, 0), color = 'var(--s1)', labelW = 170 } = {}) {
+  const max = Math.max(...rows.map(r => r.v), 1e-9);
+  el.innerHTML = rows.map(r => `<div style="display:grid;grid-template-columns:${labelW}px 1fr 64px;gap:8px;align-items:center;font-size:12px;margin:2px 0" data-tip="${esc(r.label)}: ${valFmt(r.v)}">
+    <span class="sec" style="overflow:hidden;text-overflow:ellipsis;white-space:pre">${esc(r.label)}</span>
+    <span style="height:12px;background:var(--surface-2);border-radius:0 4px 4px 0"><span style="display:block;height:12px;width:${(100 * r.v / max).toFixed(2)}%;background:${r.color || color};border-radius:0 4px 4px 0"></span></span>
+    <span style="text-align:right;font-variant-numeric:tabular-nums">${valFmt(r.v)}</span></div>`).join('');
+}
+
+// 热力图（canvas），用于注意力矩阵、分层梯度随时间
+function heatmap(el, M, { rowLabels, colLabels, tipFn, cell = 0, maxV = null, minV = 0 } = {}) {
+  const R = M.length, C = M[0].length;
+  const mx = maxV ?? Math.max(...M.flat());
+  const cv = document.createElement('canvas'); cv.width = C; cv.height = R; cv.className = 'heat';
+  const ctx = cv.getContext('2d'), img = ctx.createImageData(C, R);
+  const stops = ['--seq-0','--seq-1','--seq-2','--seq-3','--seq-4','--seq-5'].map(v => hex(css(v)));
+  for (let i = 0; i < R; i++) for (let j = 0; j < C; j++) {
+    const t = Math.max(0, Math.min(1, (M[i][j] - minV) / ((mx - minV) || 1))) * (stops.length - 1), k = Math.min(stops.length - 2, Math.floor(t)), f = t - k;
+    const c = stops[k].map((a, n) => a + (stops[k + 1][n] - a) * f), o = 4 * (i * C + j);
+    img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  el.innerHTML = ''; el.appendChild(cv);
+  if (cell) cv.style.width = Math.min(el.clientWidth, C * cell) + 'px';
+  cv.onmousemove = e => { const r = cv.getBoundingClientRect(); const j = Math.floor((e.clientX - r.left) / r.width * C), i = Math.floor((e.clientY - r.top) / r.height * R); if (i < 0 || j < 0 || i >= R || j >= C) return; $('tip').innerHTML = tipFn ? tipFn(i, j, M[i][j]) : fmt(M[i][j]); showTip(e); };
+  cv.onmouseleave = hideTip;
+}
+function hex(h) { h = h.replace('#', ''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); }
+document.addEventListener('mouseover', e => { const t = e.target.closest('[data-tip]'); if (t) { $('tip').innerHTML = t.dataset.tip; showTip(e); } });
+document.addEventListener('mouseout', e => { if (e.target.closest('[data-tip]')) hideTip(); });
+
+// ------------------------------------------------------------------ 数据加载
+async function loadRun(name, force) {
+  const c = S.cache[name];
+  const live = c && ['running', 'preparing'].includes(c.summary?.status?.state);
+  if (c && !force && !live) return c;
+  const [info, metrics, evals, snaps] = await Promise.all([api(`/api/run/${name}`), api(`/api/run/${name}/metrics`), api(`/api/run/${name}/eval`), api(`/api/run/${name}/snapshots`)]);
+  const lineage = info.config?.kind === 'finetune' ? (c?.lineage || await api(`/api/run/${name}/lineage`).catch(() => null)) : null;
+  S.cache[name] = { ...info, metrics, evals, snaps, lineage, snapData: c?.snapData || {} };
+  return S.cache[name];
+}
+async function loadSnap(name, step) { const r = S.cache[name]; if (!r.snapData[step]) r.snapData[step] = await api(`/api/run/${name}/snapshot/${step}`); return r.snapData[step]; }
+
+async function refreshRuns() {
+  S.runs = await api('/api/runs');
+  [...S.runs].sort((a, b) => (a.created || 0) - (b.created || 0)).forEach(r => runColor(r.name));
+  if (!S.focus && S.runs.length) { S.focus = S.runs[0].name; S.compare.add(S.focus); }
+  $('runs').innerHTML = S.runs.length ? S.runs.map(r => {
+    const st = r.status?.state || '?', pr = r.status?.max_steps ? Math.round(100 * (r.status.step || 0) / r.status.max_steps) : 0;
+    const ev = r.last_eval || {};
+    return `<div class="run ${r.name === S.focus ? 'active' : ''}" onclick="focusRun('${r.name}')">
+      <input type="checkbox" ${S.compare.has(r.name) ? 'checked' : ''} onclick="event.stopPropagation();toggleCmp('${r.name}',this.checked)" style="accent-color:${runColor(r.name)}">
+      <div><div class="name"><span class="swatch" style="background:${runColor(r.name)}"></span> ${esc(r.name)}</div>
+      <div class="meta"><span class="pill ${st}">${({running:'训练中 '+pr+'%',preparing:'准备数据',done:'完成',stopped:'已停止',failed:'失败',stale:'中断'})[st] || st}</span>
+      ${r.kind === 'mlx7b' ? `7B 单变量 ${esc(r.variant)} · ${esc(r.title)}` : r.kind === 'finetune' ? `微调 ${esc(r.base)} · 训练 ${fmt(r.n_trainable, 2)} 参数` : `${r.dataset} · ${fmt(r.n_params, 2)} 参数`}</div>
+      <div class="meta">${r.status?.phase && st !== 'done' ? esc(r.status.phase) + ' · ' : ''}${r.kind === 'mlx7b' ? '留出回答损失' : 'val loss'} ${fmt(ev.val_loss)}${ev.val_acc != null ? ' · val acc ' + fmt(100 * ev.val_acc, 1) + '%' : ''}</div></div></div>`;
+  }).join('') : '<div class="muted" style="padding:10px">还没有实验</div>';
+}
+function toggleCmp(n, on) { on ? S.compare.add(n) : S.compare.delete(n); render(); }
+function focusRun(n) { S.focus = n; S.compare.add(n); S.snapStep = null; S.layer = 0; S.head = 0; refreshRuns(); render(); }
+
+// ------------------------------------------------------------------ 视图
+const TABS = [['overview', '总览'], ['data', '① 数据'], ['model', '② 模型'], ['train', '③ 训练'], ['inside', '④ 模型内部'], ['gen', '⑤ 生成'], ['compare', '⑥ 实验对比']];
+const FT_TABS = [['overview', '总览'], ['lineage', '① 数据血缘'], ['base', '② 基座与 LoRA'], ['train', '③ 训练'], ['where', '④ 改了哪里'], ['impact', '⑤ 影响评估'], ['chat', '⑥ 对话对比']];
+const isFT = r => r?.config?.kind === 'finetune';
+const X7_TABS = [['overview', '实验说明与解读'], ['train', '训练曲线'], ['gens', '生成对比'], ['matrix', '单变量总表']];
+function renderTabs(ft, mb, x7) { const T = x7 ? X7_TABS : ft ? (mb ? [...FT_TABS, ['mbti', '⑦ 人格诊断']] : FT_TABS) : TABS; if (!T.some(t => t[0] === S.tab)) S.tab = 'overview'; $('tabs').innerHTML = T.map(([k, v]) => `<div class="tab ${S.tab === k ? 'active' : ''}" onclick="S.tab='${k}';render()">${v}</div>`).join(''); }
+async function render() {
+  if (!S.focus) { renderTabs(false); return; }
+  const r = await loadRun(S.focus);
+  const ft = isFT(r), x7 = r.config?.kind === 'mlx7b';
+  renderTabs(ft, !!r.config?.mbti, x7);
+  const fn = x7 ? { overview: xOverview, train: xTrain, gens: xGens, matrix: xMatrix }[S.tab] : ft ? { overview: fOverview, lineage: fLineage, base: fBase, train: fTrain, where: fWhere, impact: fImpact, chat: fChat, mbti: fMbti }[S.tab]
+               : { overview: vOverview, data: vData, model: vModel, train: vTrain, inside: vInside, gen: vGen, compare: vCompare }[S.tab];
+  const y = scrollY;
+  await fn(r);
+  scrollTo(0, y);
+}
+
+function card(title, why, id, extra = '') { return `<div class="card" ${extra}><h3>${title}</h3><p class="why">${why}</p><div id="${id}"></div></div>`; }
+function tiles(arr) { return `<div class="tiles">${arr.map(([k, v, d]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div>${d ? `<div class="d">${d}</div>` : ''}</div>`).join('')}</div>`; }
+
+async function vOverview(r) {
+  const c = r.config, st = r.summary.status || {}, rep = c.data_report || {}, ev = r.evals.at(-1) || {}, ev0 = r.evals[0] || {};
+  const mt = r.metrics.at(-1) || {};
+  const pct = st.max_steps ? Math.round(100 * (st.step || 0) / st.max_steps) : 0;
+  const rnd = c.vocab_size ? Math.log(c.vocab_size) : null;
+  const stage = (t, n, x, tab) => `<div class="stage" onclick="S.tab='${tab}';render()"><div class="n">${n}</div><div class="t">${t}</div><div class="x">${x}</div></div>`;
+  $('view').innerHTML = `
+  <div class="pipeline">
+    ${stage('数据', '① 原料', `${rep.task || c.dataset}<br>${fmt(rep.tokens, 1)} tokens`, 'data')}<span class="arrow">→</span>
+    ${stage('分词', '① 切块', `${rep.tokenizer}，词表 ${c.vocab_size}<br>${rep.compression ? rep.compression + ' 字节/token' : ''}`, 'data')}<span class="arrow">→</span>
+    ${stage('模型', '② 结构', `${c.n_layer} 层 × ${c.n_head} 头 × ${c.n_embd} 维<br>${fmt(c.n_params, 2)} 参数`, 'model')}<span class="arrow">→</span>
+    ${stage('训练', '③ 优化', `第 ${st.step || 0}/${c.max_steps} 步（${pct}%）<br>lr ${fmt(c.lr)} · wd ${c.weight_decay}`, 'train')}<span class="arrow">→</span>
+    ${stage('内部', '④ 体检', `${r.snaps.length} 次快照<br>注意力 / 梯度 / 神经元`, 'inside')}<span class="arrow">→</span>
+    ${stage('生成', '⑤ 输出', ev.val_acc != null ? `验证准确率 ${fmt(100 * ev.val_acc, 1)}%` : `验证 loss ${fmt(ev.val_loss)}`, 'gen')}
+  </div>
+  ${tiles([
+    ['状态', `<span class="pill ${st.state}">${st.state || '?'}</span>`, st.error ? `<span style="color:var(--bad)">${esc(st.error)}</span>` : `${st.device || c.device} · 用时 ${fmt(st.elapsed, 1)}s`],
+    ['验证集 loss', fmt(ev.val_loss), `起点 ${fmt(ev0.val_loss)}；瞎猜 = ln(词表) = ${fmt(rnd)}`],
+    ['困惑度 perplexity', fmt(Math.exp(ev.val_loss || NaN), 2), '≈ 模型每步在几个 token 之间犹豫'],
+    ev.val_acc != null ? ['训练 / 验证准确率', `${fmt(100 * ev.train_acc, 1)}% / ${fmt(100 * ev.val_acc, 1)}%`, '差距大 = 在死记硬背'] :
+      ['泛化差距', fmt((ev.val_loss || 0) - (ev.train_loss || 0)), 'val − train；持续变大 = 过拟合'],
+    ...(rep.compression ? [['每字节比特 bpb', fmt(bpb(ev.val_loss, rep), 3), '跨分词器可比的指标：越低越好']] : []),
+    ['吞吐', fmt(mt.tok_per_s, 0) + ' tok/s', `每步 ${fmt(c.tokens_per_step, 0)} tokens`],
+  ])}
+  <div class="grid">
+    <div class="card"><h3>假设 · 结论</h3><p class="why">训练前写假设，训练后对照证据写结论。这就是"实验报告"的雏形。</p>
+      <div style="margin-bottom:8px"><span class="muted">假设：</span>${esc(c.hypothesis || '（未填写）')}</div>
+      <textarea id="notes" rows="6" style="width:100%" placeholder="观察与结论：看到了什么？和假设一致吗？下一步改哪个变量？">${esc(c.notes || '')}</textarea>
+      <div class="row" style="margin-top:6px"><button onclick="saveNotes()">保存笔记</button><span class="muted" id="notesOk"></span>
+      ${['running', 'preparing'].includes(st.state) ? `<span style="flex:1"></span><button class="danger" onclick="stopRun()">停止训练</button>` : ''}</div></div>
+    ${card('损失曲线', '最重要的一张图：训练集（细线）和验证集（粗线）的损失。两者一起下降 = 在学规律；只降训练集 = 在背答案。', 'ovLoss')}
+  </div>`;
+  lossChart($('ovLoss'), [S.focus]);
+}
+async function saveNotes() { await api(`/api/run/${S.focus}/notes`, { notes: $('notes').value }); $('notesOk').textContent = '已保存'; S.cache[S.focus].config.notes = $('notes').value; }
+async function stopRun() { await api(`/api/run/${S.focus}/stop`, {}); $('notesOk').textContent = '已请求停止'; }
+
+function lossChart(el, names, opt = {}) {
+  const series = [];
+  names.forEach(n => { const r = S.cache[n]; if (!r) return;
+    series.push({ name: (names.length > 1 ? n + ' · ' : '') + '训练（平滑）', color: runColor(n), width: 1.2, opacity: .55, points: ema(r.metrics.map(m => [m.step, m.loss]), .9) });
+    series.push({ name: (names.length > 1 ? n + ' · ' : '') + '验证', color: runColor(n), width: 2.4, points: r.evals.map(e => [e.step, e.val_loss]) });
+  });
+  lineChart(el, { series, yLabel: 'loss', ...opt });
+}
+const bpb = (loss, rep) => rep?.compression ? loss / (rep.val_compression || rep.compression) / Math.LN2 : null;
+function ema(pts, a) { let m = null; return pts.map(([x, y]) => [x, m = m == null ? y : m * a + y * (1 - a)]); }
+
+function vData(r) {
+  const rep = r.config.data_report || {};
+  if (rep.task) {
+    $('view').innerHTML = `<div class="hint">这是一个"玩具任务"：模型看到 <b>a + b =</b>，要答出 <b>(a+b) mod ${r.config.p}</b>。全部组合只有 ${rep.train_examples + rep.val_examples} 个，其中 ${fmt(100 * rep.train_frac, 0)}% 给模型训练，剩下的模型从没见过，用来检验它是"背下来了"还是"真的学会了加法"。</div>
+    ${tiles([['任务', rep.task], ['词表', rep.vocab_size, '0..p-1 的数字 + "+" "="'], ['训练样本', rep.train_examples], ['验证样本（没见过）', rep.val_examples]])}
+    <div class="card"><h3>训练样本示例</h3><p class="why">每条 5 个 token；损失只算最后一个（答案）位置。</p><pre class="mono">${rep.examples.map(esc).join('\n')}</pre></div>`;
+    return;
+  }
+  $('view').innerHTML = `
+  <div class="hint">模型看到的不是文字，而是一串整数（token）。分词器决定"一个 token 是多大一块"：块越大，序列越短、每步学到的信息越多，但词表也越大。</div>
+  ${tiles([['语料', rep.name], ['原始大小', fmt(rep.bytes, 1) + ' B', `${fmt(rep.lines, 0)} 行`], ['Token 总数', fmt(rep.tokens, 1)], ['分词器', rep.tokenizer, `词表 ${rep.vocab_size}，实际用到 ${rep.unique_used}`], ['压缩率', rep.compression + ' 字节/token', '越大 = 每个 token 携带的信息越多']])}
+  <div class="grid">
+    <div class="card" style="grid-column:1/-1"><h3>分词结果：模型眼中的文本</h3><p class="why">每个色块是一个 token（· 是空格，↵ 是换行）。悬停看 token 编号。注意常见词和缩进是怎样被并成一块的。</p>
+      <div class="toks">${rep.sample_tokens.map((t, i) => `<span style="background:color-mix(in srgb, var(${SERIES[i % 4]}) 22%, transparent)" data-tip="第 ${i} 个 token：「${esc(t)}」">${vis(t)}</span>`).join('')}</div></div>
+    ${card('最常见的 30 个 token', '语料里出现最多的块。BPE 会优先把高频组合并成一个 token。', 'topTok')}
+    ${card('齐普夫定律（双对数）', '按频次排序后，第 k 名的频次大约 ∝ 1/k：少数 token 极常见，大量 token 很罕见。这就是为什么模型先学会常见模式。', 'zipf')}
+    ${rep.merges_preview?.length ? `<div class="card"><h3>BPE 合并顺序</h3><p class="why">分词器从单个字节开始，每次把最常见的相邻对合成新 token。第几次合并 → 得到什么块：</p>
+      <table><tr><th>第几次合并</th><th>新 token</th></tr>${rep.merges_preview.map(m => `<tr><td>${m.rank + 1}</td><td class="toks"><span>${vis(m.token)}</span></td></tr>`).join('')}</table></div>` : ''}
+  </div>`;
+  barChart($('topTok'), rep.top_tokens.slice(0, 30).map(t => ({ label: vis(t.token).replace(/\n/g, ''), v: t.count })), { labelW: 110 });
+  lineChart($('zipf'), { series: [{ name: '频次', color: 'var(--s1)', points: rep.zipf_rank.map((k, i) => [k, rep.zipf[i]]) }], logY: true, logX: true, xLabel: '排名', yLabel: '出现次数' });
+}
+
+function vModel(r) {
+  const c = r.config, pb = c.param_breakdown || [];
+  const per = { emb: 0, attn: 0, mlp: 0, ln: 0 };
+  pb.forEach(p => { if (/embedding/.test(p.name)) per.emb += p.params; else if (/attention/.test(p.name)) per.attn += p.params; else if (/mlp/.test(p.name)) per.mlp += p.params; else per.ln += p.params; });
+  const blk = i => `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin:6px 0;background:var(--surface-2)">
+     <div class="muted" style="font-size:11px">Block ${i}（重复 ${c.n_layer} 次中的第 ${i + 1} 个）</div>
+     <div>LayerNorm → <b>多头注意力</b>（${c.n_head} 个头，每头 ${c.n_embd / c.n_head} 维）：让每个位置去"看"前面的 token → 加回残差</div>
+     <div>LayerNorm → <b>MLP</b>（${c.n_embd} → ${4 * c.n_embd} → ${c.n_embd}，GELU）：逐位置加工信息 → 加回残差</div></div>`;
+  $('view').innerHTML = `
+  ${tiles([['总参数', fmt(c.n_params, 2)], ['层数', c.n_layer], ['注意力头', c.n_head], ['隐藏维度', c.n_embd], ['上下文长度', c.block_size, '模型一次最多看多少 token'],
+    ['训练 FLOPs 估算', fmt(6 * c.n_params * (r.metrics.at(-1)?.tokens || 0), 1), '≈ 6 × 参数 × 已训练 tokens']])}
+  <div class="grid">
+    <div class="card"><h3>结构（数据从上往下流）</h3><p class="why">GPT 本质：token 变成向量 → 经过 N 个相同的 Block 反复加工 → 预测下一个 token 的概率。</p>
+      <div style="padding:6px 10px;border:1px dashed var(--border);border-radius:8px">输入 token ids（长度 ≤ ${c.block_size}）</div>
+      <div style="padding:6px 10px">↓ 查表：token 嵌入（${c.vocab_size} × ${c.n_embd}）+ 位置嵌入（${c.block_size} × ${c.n_embd}）</div>
+      ${Array.from({ length: Math.min(c.n_layer, 3) }, (_, i) => blk(i)).join('')}${c.n_layer > 3 ? `<div class="muted" style="padding:2px 10px">… 共 ${c.n_layer} 个 Block</div>` : ''}
+      <div style="padding:6px 10px">↓ LayerNorm → 输出层（与 token 嵌入共享权重）→ softmax</div>
+      <div style="padding:6px 10px;border:1px dashed var(--border);border-radius:8px">下一个 token 的概率分布（${c.vocab_size} 个候选）</div></div>
+    <div class="card"><h3>参数都花在哪了</h3><p class="why">小模型里嵌入层占比往往很高；模型变大后，参数主要集中在 MLP。</p><div id="pbAgg"></div>
+      <h3 style="margin-top:14px">逐组件</h3><div id="pb"></div></div>
+  </div>`;
+  barChart($('pbAgg'), [{ label: 'MLP', v: per.mlp }, { label: '注意力', v: per.attn }, { label: '嵌入', v: per.emb }, { label: 'LayerNorm', v: per.ln }], { valFmt: v => fmt(v, 1), labelW: 80 });
+  barChart($('pb'), pb.map(p => ({ label: p.name, v: p.params })), { valFmt: v => fmt(v, 1) });
+}
+
+async function vTrain(r) {
+  const names = [...S.compare].filter(n => S.runs.some(x => x.name === n));
+  const multi = names.length > 1;
+  const isTask = r.config.dataset === 'modadd';
+  $('view').innerHTML = `
+  <div class="hint">${multi ? `正在叠加对比 ${names.length} 个实验（左栏勾选）。` : '在左栏勾选其它实验，可把它们的曲线叠在一起对比。'}横轴是训练步数。</div>
+  <div class="grid">
+    ${card('损失', '训练（细线，已平滑）与验证（粗线）。看两件事：下降速度，以及两条线之间的差距。', 'cLoss')}
+    ${isTask ? card('准确率', '实线 = 验证（没见过的题），虚线 = 训练。顿悟现象：训练早就 100%，验证很久之后才突然跃升。', 'cAcc') : ''}
+    ${card('学习率调度', '先线性预热（防止初期更新太猛），再余弦衰减（后期小步精修）。', 'cLr')}
+    ${card('梯度范数（裁剪前）', '每一步"要改多少"的总量。突然出现尖峰 = 训练不稳；被裁剪在 grad_clip 以下。', 'cGn')}
+    ${card('训练吞吐', '每秒处理多少 token。用来估算训练更大模型要多久。', 'cTp')}
+  </div>`;
+  await Promise.all(names.map(n => loadRun(n)));
+  lossChart($('cLoss'), names);
+  if (isTask) lineChart($('cAcc'), { series: names.flatMap(n => [
+    { name: (multi ? n + ' · ' : '') + '验证', color: runColor(n), points: S.cache[n].evals.filter(e => e.val_acc != null).map(e => [e.step, 100 * e.val_acc]) },
+    { name: (multi ? n + ' · ' : '') + '训练', color: runColor(n), dash: '5 4', width: 1.5, points: S.cache[n].evals.filter(e => e.train_acc != null).map(e => [e.step, 100 * e.train_acc]) }]), yLabel: '准确率 %', yFmt: v => fmt(v, 0) + '%' });
+  lineChart($('cLr'), { series: names.map(n => ({ name: n, color: runColor(n), points: S.cache[n].metrics.map(m => [m.step, m.lr]) })), yLabel: '学习率', yFmt: v => v.toExponential(1) });
+  lineChart($('cGn'), { series: names.map(n => ({ name: n, color: runColor(n), points: S.cache[n].metrics.map(m => [m.step, m.grad_norm]) })), logY: true, yLabel: '梯度范数', refLine: r.config.grad_clip });
+  lineChart($('cTp'), { series: names.map(n => ({ name: n, color: runColor(n), points: S.cache[n].metrics.filter(m => m.step > 0).map(m => [m.step, m.tok_per_s]) })), yLabel: 'tok/s', yFmt: v => fmt(v, 0) });
+}
+
+async function vInside(r) {
+  const groups = r.config.layer_groups || [];
+  const steps = r.snaps;
+  if (!steps.length) { $('view').innerHTML = '<div class="empty">还没有快照</div>'; return; }
+  if (S.snapStep == null || !steps.includes(S.snapStep)) S.snapStep = steps.at(-1);
+  const snap = await loadSnap(S.focus, S.snapStep);
+  const L = snap.attn.length, H = snap.attn[0].length;
+  S.layer = Math.min(S.layer, L - 1); S.head = Math.min(S.head, H - 1);
+  const gColor = i => `var(${SERIES[i % 8]})`;
+  $('view').innerHTML = `
+  <div class="card" style="margin-bottom:16px"><div class="row" style="margin:0">
+    <b>快照时间轴</b><input type="range" id="snapSlider" min="0" max="${steps.length - 1}" value="${steps.indexOf(S.snapStep)}" style="flex:1" oninput="S.snapStep=${JSON.stringify(steps)}[this.value];$('snapLbl').textContent='第 '+S.snapStep+' 步'" onchange="render()">
+    <b id="snapLbl">第 ${S.snapStep} 步</b><span class="muted">拖动查看训练不同时刻模型内部的样子（前期快照更密，因为变化快）</span></div></div>
+  <div class="grid">
+    <div class="card"><h3>注意力图 · 第 ${S.layer} 层 第 ${S.head} 头</h3><p class="why">每一行是一个位置，它把"注意力"分配给前面哪些 token（越深越多）。训练后会出现规律：看自己、看上一个 token、看配对的括号……</p>
+      <div class="row">层 <select onchange="S.layer=+this.value;render()">${Array.from({ length: L }, (_, i) => `<option ${i === S.layer ? 'selected' : ''}>${i}</option>`).join('')}</select>
+      头 <select onchange="S.head=+this.value;render()">${Array.from({ length: H }, (_, i) => `<option ${i === S.head ? 'selected' : ''}>${i}</option>`).join('')}</select></div>
+      <div id="attn"></div></div>
+    <div class="card"><h3>所有头一览</h3><p class="why">点任意一个缩略图放大。熵越低 = 注意力越集中（这个头"有专长"）；熵高 = 平均地看所有位置。</p><div id="allHeads" style="display:grid;grid-template-columns:repeat(${H},1fr);gap:6px"></div></div>
+    <div class="card" style="grid-column:1/-1"><h3>逐 token 损失：模型在哪里感到"意外"</h3><p class="why">探针文本（固定的一段验证集）。颜色越深 = 模型越没猜到下一个 token。悬停看模型当时猜的是什么。拖动时间轴看它怎样逐步变"不意外"。</p><div id="tokLoss" class="toks"></div></div>
+    ${card('分层梯度范数（随训练）', '每一层收到的梯度大小。某层长期远小于其它层 = 它几乎没在学（梯度消失）。', 'lg')}
+    ${card('更新幅度比 |Δθ|/|θ|（对数轴）', '每步参数被改动的比例。经验值 ~1e-3（虚线）附近健康：远大于它易发散，远小于它学得太慢。', 'ur')}
+    ${card('残差流范数（逐层）', '信息在 Block 之间传递的"主干道"的强度。逐层平稳增长是正常的；爆炸式增长要警惕。', 'resid')}
+    ${card('MLP 激活稀疏度（逐层）', '激活值 ≤ 0 的比例。训练后通常上升：神经元变得"挑剔"，只对特定模式响应。另见悬停里的死亡比例（从不正向激活的神经元，越高越浪费）。', 'dead')}
+    ${card('词嵌入二维投影（PCA）', '把每个 token 的向量压到二维。训练后，作用相似的 token（如数字、关键字）会聚在一起。悬停看是哪个 token。', 'pca')}
+    ${card('各层权重标准差', '权重整体尺度。权重衰减会把它往下压；持续变大可能意味着需要更强正则。', 'wstd')}
+  </div>`;
+  const tk = snap.probe_tokens.map(t => vis(t));
+  heatmap($('attn'), snap.attn[S.layer][S.head], { tipFn: (i, j, v) => `位置 ${i}「${tk[i]}」→ 看 位置 ${j}「${tk[j]}」：<b>${fmt(100 * v, 1)}%</b>`, maxV: 1 });
+  snap.attn[0].forEach((_, h) => {});
+  $('allHeads').innerHTML = snap.attn.flatMap((layer, l) => layer.map((_, h) => `<div style="cursor:pointer;${l === S.layer && h === S.head ? 'outline:2px solid var(--accent);' : ''}border-radius:4px" onclick="S.layer=${l};S.head=${h};render()"><div id="hm_${l}_${h}"></div><div class="muted" style="font-size:10.5px;text-align:center">L${l}H${h} · 熵 ${fmt(snap.attn_entropy[l][h], 2)}</div></div>`)).join('');
+  snap.attn.forEach((layer, l) => layer.forEach((m, h) => heatmap($(`hm_${l}_${h}`), m, { maxV: 1, tipFn: (i, j, v) => `L${l}H${h}：「${tk[i]}」→「${tk[j]}」 ${fmt(100 * v, 1)}%` })));
+  const mx = Math.max(...snap.token_loss, 1);
+  $('tokLoss').innerHTML = snap.probe_tokens.map((t, i) => i === 0 ? `<span>${vis(t)}</span>` :
+    `<span style="background:color-mix(in srgb, var(--s2) ${Math.round(85 * snap.token_loss[i - 1] / mx)}%, transparent)" data-tip="真实：「${esc(vis(t))}」 损失 <b>${fmt(snap.token_loss[i - 1], 2)}</b><br>模型猜：「${esc(vis(snap.pred_tokens[i - 1]))}」">${vis(t)}</span>`).join('');
+  lineChart($('lg'), { series: groups.map((g, i) => ({ name: g, color: gColor(i), points: ema(r.metrics.map(m => [m.step, m.layer_grad[g]]), .8) })), logY: true, yLabel: '梯度范数（平滑）' });
+  lineChart($('ur'), { series: groups.map((g, i) => ({ name: g, color: gColor(i), points: ema(r.metrics.filter(m => m.step > 0).map(m => [m.step, m.update_ratio[g]]), .8) })), logY: true, yLabel: '|Δθ|/|θ|', refLine: 1e-3, yFmt: v => v.toExponential(0) });
+  // 残差 & 死亡率：所有快照随时间
+  const all = await Promise.all(steps.map(s => loadSnap(S.focus, s)));
+  lineChart($('resid'), { series: all[0].resid_norm.map((_, k) => ({ name: k === 0 ? '嵌入输出' : `Block ${k - 1} 之后`, color: gColor(k), points: all.map(s => [s.step, s.resid_norm[k]]) })), yLabel: '平均 L2 范数' });
+  if (all[0].mlp_sparsity) lineChart($('dead'), { series: all[0].mlp_sparsity.flatMap((_, k) => [
+      { name: `Block ${k} 稀疏度`, color: gColor(k + 1), points: all.map(s => [s.step, 100 * s.mlp_sparsity[k]]) },
+      { name: `Block ${k} 死亡`, color: gColor(k + 1), dash: '4 4', width: 1.5, points: all.map(s => [s.step, 100 * s.mlp_dead_frac[k]]) }]), yLabel: '% （实线稀疏度 / 虚线死亡比例）', yFmt: v => fmt(v, 1) + '%' });
+  else $('dead').innerHTML = '<div class="empty">该实验由旧版本训练，无此数据</div>';
+  scatter($('pca'), snap.emb_pca);
+  const ws = Object.entries(snap.weight_std).filter(([k]) => !/pos_emb/.test(k));
+  barChart($('wstd'), ws.map(([k, v]) => ({ label: k.replace('.weight', ''), v })), { valFmt: v => fmt(v, 4), labelW: 150 });
+}
+
+function scatter(el, pts) {
+  const W = el.clientWidth || 500, H = 300, P = 16;
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const tx = x => P + (W - 2 * P) * (x - x0) / ((x1 - x0) || 1), ty = y => P + (H - 2 * P) * (1 - (y - y0) / ((y1 - y0) || 1));
+  const cls = t => /^\s*\d+\s*$/.test(t) ? 2 : /^\s*[A-Za-z_]+\s*$/.test(t) ? 0 : /^\s+$/.test(t) ? 3 : 1;
+  const names = ['字母/单词', '符号', '数字', '空白'];
+  el.innerHTML = `<div class="legend">${names.map((n, i) => `<span><span class="swatch" style="background:var(${SERIES[i]})"></span> ${n}</span>`).join('')}</div>
+  <div class="chart"><svg viewBox="0 0 ${W} ${H}" height="${H}">${pts.map(p => `<circle cx="${tx(p.x).toFixed(1)}" cy="${ty(p.y).toFixed(1)}" r="4" fill="var(${SERIES[cls(p.t)]})" stroke="var(--surface-1)" stroke-width="1.5" data-tip="「${esc(vis(p.t))}」"/>`).join('')}</svg></div>`;
+}
+
+async function vGen(r) {
+  const steps = r.snaps;
+  const all = await Promise.all(steps.map(s => loadSnap(S.focus, s)));
+  const isTask = r.config.dataset === 'modadd';
+  const done = r.summary.status?.state === 'done' || r.summary.status?.state === 'stopped';
+  $('view').innerHTML = `
+  <div class="grid">
+    <div class="card" style="grid-column:1/-1"><h3>交互生成：看模型每一步在想什么</h3>
+      <p class="why">${done ? '输入开头，模型逐个 token 往下写。每个 token 的底色越深 = 模型越有把握；悬停看它当时的前 5 个候选和概率。' : '训练结束后可用（需要保存的权重）。'}</p>
+      <div class="row"><input id="gPrompt" style="flex:1;font-family:ui-monospace,monospace" value="${isTask ? '12 + 34 =' : 'def '}">
+        温度 <input id="gTemp" type="number" step="0.1" value="${isTask ? 0 : 0.8}" style="width:64px">
+        top-k <input id="gK" type="number" value="40" style="width:64px">
+        <button class="primary" ${done ? '' : 'disabled'} onclick="doGen()">生成</button></div>
+      <div id="gOut" class="toks gen"></div></div>
+    <div class="card" style="grid-column:1/-1"><h3>训练过程中的生成样本</h3><p class="why">同一个开头、同一个随机种子，在不同训练步数下模型写出来的东西。从乱码到像样的过程一目了然。</p>
+      <table>${all.slice().reverse().map(s => `<tr><td style="width:90px;vertical-align:top" class="sec">第 ${s.step} 步</td><td><pre class="mono">${esc(s.sample || '')}</pre></td></tr>`).join('')}</table></div>
+  </div>`;
+}
+async function doGen() {
+  $('gOut').innerHTML = '<span class="muted">生成中…</span>';
+  try {
+    const g = await api('/api/generate', { run: S.focus, prompt: $('gPrompt').value, temperature: +$('gTemp').value, top_k: +$('gK').value, n: 120 });
+    $('gOut').innerHTML = `<span class="muted">${g.prompt_tokens.map(vis).join('')}</span>` + g.steps.map(s =>
+      `<span class="tk" style="background:color-mix(in srgb, var(--s1) ${Math.round(10 + 60 * s.p)}%, transparent)" data-tip="选中「${esc(vis(s.token))}」 p=${fmt(s.p, 3)}<br>${s.alts.map(a => `${esc(vis(a.t))} : ${fmt(100 * a.p, 1)}%`).join('<br>')}">${vis(s.token)}</span>`).join('');
+  } catch (e) { $('gOut').innerHTML = `<span style="color:var(--bad)">${esc(e.message)}</span>`; }
+}
+
+async function vCompare() {
+  const names = [...S.compare].filter(n => S.runs.some(x => x.name === n));
+  await Promise.all(names.map(n => loadRun(n)));
+  const keys = ['dataset', 'tokenizer', 'vocab_size', 'n_layer', 'n_head', 'n_embd', 'block_size', 'dropout', 'batch_size', 'max_steps', 'lr', 'min_lr', 'warmup', 'weight_decay', 'beta2', 'grad_clip', 'seed', 'train_frac'];
+  const rows = names.map(n => S.cache[n]);
+  const varies = k => new Set(rows.map(r => JSON.stringify(r.config[k]))).size > 1;
+  const res = r => { const ev = r.evals.at(-1) || {}; return { val: ev.val_loss, tr: ev.train_loss, acc: ev.val_acc, best: Math.min(...r.evals.map(e => e.val_loss)) }; };
+  $('view').innerHTML = `
+  <div class="hint">勾选左栏中要对比的实验。<b>黄色格子</b> = 实验之间不同的配置项，也就是这组对比真正在测试的变量。好的对照实验，一次只改一个变量。</div>
+  <div class="card" style="overflow-x:auto;margin-bottom:16px"><table>
+    <tr><th>实验</th>${keys.filter(varies).map(k => `<th>${k}</th>`).join('')}<th>参数</th><th>最终 val loss</th><th>最佳 val loss</th><th>val bpb</th><th>泛化差距</th><th>val acc</th><th>用时</th><th>假设</th></tr>
+    ${rows.map(r => { const x = res(r); return `<tr><td><span class="swatch" style="background:${runColor(r.config.name)}"></span> <b>${esc(r.config.name)}</b></td>
+      ${keys.filter(varies).map(k => `<td class="diff">${esc(JSON.stringify(r.config[k]) ?? '')}</td>`).join('')}
+      <td>${fmt(r.config.n_params, 2)}</td><td>${fmt(x.val)}</td><td>${fmt(x.best)}</td><td>${fmt(bpb(x.val, r.config.data_report), 3)}</td><td>${fmt(x.val - x.tr)}</td><td>${x.acc != null ? fmt(100 * x.acc, 1) + '%' : '–'}</td>
+      <td>${fmt(r.summary.status?.elapsed, 0)}s</td><td style="max-width:320px" class="sec">${esc(r.config.hypothesis || '')}</td></tr>`; }).join('')}
+  </table>${names.length < 2 ? '<div class="muted" style="padding:8px">至少勾选 2 个实验才有对比意义。</div>' : ''}</div>
+  <div class="grid">
+    ${card('验证 loss · 按步数', '同样训练步数下谁学得更好。', 'cmpStep')}
+    ${card('验证 loss · 按处理的 token 数（对数轴）', '按"看过多少数据"对齐，更公平；也是观察缩放规律（scaling law）的视角。', 'cmpTok')}
+    ${card('缩放规律：最佳验证 bpb 对参数量（双对数）', '每个点是一个实验。同一数据集上，点大致落在一条直线上 = 符合幂律。分词器不同时用 bpb 才可比。', 'cmpScale')}
+  </div>`;
+  lineChart($('cmpStep'), { series: names.map(n => ({ name: n, color: runColor(n), points: S.cache[n].evals.map(e => [e.step, e.val_loss]) })), yLabel: 'val loss' });
+  const pts = rows.filter(r => r.config.data_report?.compression && r.evals.length).map(r => ({ n: r.config.name, x: r.config.n_params, y: bpb(Math.min(...r.evals.map(e => e.val_loss)), r.config.data_report) }));
+  if (pts.length) {
+    const el = $('cmpScale'), W = el.clientWidth || 500, H = 240, L = 52, B = 30, T = 14, R = 16;
+    const lx = pts.map(p => Math.log10(p.x)), ly = pts.map(p => Math.log10(p.y));
+    let [a0, a1, b0, b1] = [Math.min(...lx) - .1, Math.max(...lx) + .1, Math.min(...ly) - .03, Math.max(...ly) + .03];
+    const tx = v => L + (W - L - R) * (Math.log10(v) - a0) / (a1 - a0), ty = v => T + (H - T - B) * (1 - (Math.log10(v) - b0) / (b1 - b0));
+    const yt = [10 ** b0, 10 ** ((b0 + b1) / 2), 10 ** b1];
+    el.innerHTML = `<div class="chart"><svg viewBox="0 0 ${W} ${H}" height="${H}">${yt.map(v => `<line x1="${L}" x2="${W - R}" y1="${ty(v)}" y2="${ty(v)}" stroke="var(--grid)"/><text x="${L - 6}" y="${ty(v) + 4}" text-anchor="end">${fmt(v, 2)}</text>`).join('')}
+      <line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="var(--border)"/><text x="4" y="10" style="font-weight:600">val bpb</text><text x="${W - R}" y="${H - 8}" text-anchor="end">参数量 →</text>
+      ${pts.map(p => `<circle cx="${tx(p.x)}" cy="${ty(p.y)}" r="6" fill="${runColor(p.n)}" stroke="var(--surface-1)" stroke-width="2" data-tip="${esc(p.n)}<br>参数 ${fmt(p.x, 2)} · bpb <b>${fmt(p.y, 3)}</b>"/><text x="${tx(p.x) > W * .65 ? tx(p.x) - 9 : tx(p.x) + 9}" y="${ty(p.y) + 4}" text-anchor="${tx(p.x) > W * .65 ? 'end' : 'start'}">${esc(p.n)}</text>`).join('')}</svg></div>`;
+  } else $('cmpScale').innerHTML = '<div class="empty">勾选文本类实验后显示</div>';
+  lineChart($('cmpTok'), { series: names.map(n => ({ name: n, color: runColor(n), points: S.cache[n].evals.filter(e => e.tokens > 0).map(e => [e.tokens, e.val_loss]) })), logX: true, xLabel: 'tokens', yLabel: 'val loss' });
+}
+
+// ------------------------------------------------------------------ 微调视图
+const ftRuns = () => [...S.compare].filter(n => S.runs.find(x => x.name === n)?.kind === 'finetune');
+const pct = v => v == null ? '–' : (v >= 0 ? '+' : '') + fmt(100 * v, 1) + '%';
+const visTok = t => esc(t).replace(/\n/g, '↵\n').replace(/ /g, '·');
+function moduleShape(m, a) {
+  const q = a.heads * a.head_dim, kv = a.kv_heads * a.head_dim, h = a.hidden, f = a.ffn;
+  return { q_proj: [q, h], k_proj: [kv, h], v_proj: [kv, h], o_proj: [h, q], gate_proj: [f, h], up_proj: [f, h], down_proj: [h, f] }[m];
+}
+const MOD_CN = { q_proj: 'Q 查询', k_proj: 'K 键', v_proj: 'V 值', o_proj: 'O 输出', gate_proj: 'MLP 门控', up_proj: 'MLP 升维', down_proj: 'MLP 降维' };
+
+async function fOverview(r) {
+  const c = r.config, st = r.summary.status || {}, L = r.lineage || {}, ev0 = r.evals[0] || {}, ev = r.evals.at(-1) || {};
+  const snaps = await Promise.all([r.snaps[0], r.snaps.at(-1)].filter(x => x != null).map(s => loadSnap(S.focus, s)));
+  const stopRate = sn => sn ? sn.probes.filter(p => p.stopped).length / sn.probes.length : null;  // 只统计输出 <|im_end|> 的
+  const g = k => ev0[k] ? (ev[k] - ev0[k]) / ev0[k] : null;
+  const stage = (t, n, x, tab) => `<div class="stage" onclick="S.tab='${tab}';render()"><div class="n">${n}</div><div class="t">${t}</div><div class="x">${x}</div></div>`;
+  const kept = L.stages?.at(-2)?.kept;
+  $('view').innerHTML = `
+  <div class="hint">这是一次<b>真实的微调</b>：拿别人预训练好的 ${esc(c.base)}（${fmt(c.n_params, 2)} 参数，已经用海量文本预训练过），冻结全部原始参数，只插入并训练 ${fmt(c.n_trainable, 2)} 个新参数（${fmt(100 * c.n_trainable / c.n_params, 2)}%），让它学会按指令回答。下面每一格都可以点进去看细节。</div>
+  <div class="pipeline">
+    ${stage('来源', '① 数据从哪来', `${esc(c.dataset_repo)}<br>${fmt(L.source?.rows, 1)} 条`, 'lineage')}<span class="arrow">→</span>
+    ${stage('清洗与抽样', '① 留下什么', `去空、去重、去超长<br>留 ${fmt(kept, 1)} 条`, 'lineage')}<span class="arrow">→</span>
+    ${stage('模板与分词', '① 变成什么', `ChatML 模板<br>只学回答部分（${fmt(100 * (L.format?.trained_token_frac || 0), 0)}% token）`, 'lineage')}<span class="arrow">→</span>
+    ${stage('基座 + LoRA', '② 改哪里', `冻结 ${fmt(c.n_params, 2)}<br>训练 ${fmt(c.n_trainable, 2)}（${c.lora_modules?.length} 类模块）`, 'base')}<span class="arrow">→</span>
+    ${stage('训练', '③ 怎么改', `第 ${st.step || 0}/${c.max_steps} 步<br>约 ${L.format?.epochs} 轮数据`, 'train')}<span class="arrow">→</span>
+    ${stage('影响', '⑤ 改成什么样', `回答损失 ${fmt(ev0.val_loss, 2)} → ${fmt(ev.val_loss, 2)}<br>遗忘 ${pct(g('general:中文文档'))}`, 'impact')}<span class="arrow">→</span>
+    ${stage('去向', '⑥ 产出', st.adapter_bytes ? `adapter ${fmt(st.adapter_bytes / 1e6, 1)} MB<br>可开关对比` : '训练结束后生成', 'chat')}
+  </div>
+  ${tiles([
+    ['状态', `<span class="pill ${st.state}">${st.state || '?'}</span>`, st.error ? `<span style="color:var(--bad)">${esc(st.error)}</span>` : `${esc(st.phase || '')} · 用时 ${fmt(st.elapsed, 0)}s`],
+    ['指令回答损失（验证集）', `${fmt(ev.val_loss, 3)}`, `第 0 步（基座）${fmt(ev0.val_loss, 3)}：越低 = 越像参考答案`],
+    ['遗忘：中文文档损失', pct(g('general:中文文档')), '和基座相比；正数 = 通用能力变差'],
+    ['遗忘：Python 代码损失', pct(g('general:Python 代码')), '代码完全不在训练数据里'],
+    ['与基座的偏离（KL）', fmt(ev.kl_to_base, 4), '同一段文本上两个模型预测分布的差异'],
+    ['答完会停的比例', `${fmt(100 * (stopRate(snaps[0]) ?? NaN), 0)}% → ${fmt(100 * (stopRate(snaps[1]) ?? NaN), 0)}%`, '8 个固定探针问题，基座 → 当前'],
+  ])}
+  <div class="grid">
+    <div class="card"><h3>假设 · 结论</h3><p class="why">先写预期，再对照证据写结论。</p>
+      <div style="margin-bottom:8px"><span class="muted">假设：</span>${esc(c.hypothesis || '（未填写）')}</div>
+      <textarea id="notes" rows="6" style="width:100%" placeholder="观察与结论">${esc(c.notes || '')}</textarea>
+      <div class="row" style="margin-top:6px"><button onclick="saveNotes()">保存笔记</button><span class="muted" id="notesOk"></span>
+      ${['running', 'preparing'].includes(st.state) ? `<span style="flex:1"></span><button class="danger" onclick="stopRun()">停止训练</button>` : ''}</div></div>
+    ${card('损失曲线', '细线 = 训练批次（平滑）；粗线 = 验证集。只统计"回答"部分的 token。', 'ovLoss')}
+  </div>`;
+  lossChart($('ovLoss'), [S.focus]);
+}
+
+function fLineage(r) {
+  const L = r.lineage, c = r.config;
+  if (!L) { $('view').innerHTML = '<div class="empty">数据流水线还在准备…</div>'; return; }
+  const src = L.source, F = L.format;
+  const kv = (k, v) => `<tr><th style="width:120px">${k}</th><td>${v}</td></tr>`;
+  const tokSpan = (t, trained) => {
+    const special = /<\|im_(start|end)\|>/.test(t);
+    return `<span style="background:${trained ? 'color-mix(in srgb, var(--s1) 26%, transparent)' : 'var(--surface-2)'};${special ? 'box-shadow:inset 0 0 0 1.5px var(--s4);' : ''}color:${trained ? 'var(--text-primary)' : 'var(--text-muted)'}" data-tip="「${esc(visTok(t))}」${t.includes('\uFFFD') ? '<br>这是"半个字"：Qwen 的分词器按字节切分，一个生僻汉字可能拆成 2–3 个 token，单独显示时就是 �' : ''}<br>${trained ? '<b>算损失</b>：模型要学着生成它' : '不算损失：只作为上下文'}">${visTok(t)}</span>`;
+  };
+  $('view').innerHTML = `
+  <div class="hint">数据血缘：一条训练样本从<b>公开数据集里的一行</b>，经过清洗、抽样、套模板、分词，最后变成<b>模型实际看到的一串 token</b>。每一步删了什么、为什么删，都记录在下面。</div>
+  <div class="grid">
+    <div class="card"><h3>① 来源：数据从哪里来</h3><p class="why">先确认出处、许可证和文件指纹（SHA-256）：别人拿同一个文件，能复现你的实验。</p>
+      <table>${kv('数据集', `<a href="${src.url}" target="_blank" style="color:var(--accent)">${esc(src.repo)}</a>`)}${kv('怎么来的', esc(src.origin))}
+      ${kv('许可证', `<span style="color:var(--warn)">⚠ ${esc(src.license)}</span>`)}${kv('本地文件', `<code>${esc(src.file)}</code>（${fmt(src.bytes / 1e6, 1)} MB）`)}
+      ${kv('SHA-256', `<code>${src.sha256.slice(0, 24)}…</code>`)}${kv('行数 / 字段', `${fmt(src.rows, 0)} 行 · ${src.columns.join('、')}`)}</table></div>
+    <div class="card"><h3>原始样例（未经任何处理）</h3><p class="why">数据集里的原始一行有三个字段：指令、输入（可为空）、参考回答。</p>
+      ${src.raw_examples.map(e => `<pre class="mono" style="margin-bottom:8px"><b>指令：</b>${esc(e.instruction)}${e.input ? `\n<b>输入：</b>${esc(e.input)}` : ''}\n<b>回答：</b>${esc(e.output.slice(0, 220))}${e.output.length > 220 ? '…' : ''}</pre>`).join('')}</div>
+    <div class="card" style="grid-column:1/-1"><h3>② 清洗与抽样：每一步还剩多少</h3><p class="why">点开每一步，看被删掉的样例和原因。数据决定模型的上限，删什么和留什么都是决策。</p>
+      <div id="funnel"></div>
+      ${L.stages.map((g, i) => `<details style="margin:4px 0"><summary><b>${i + 1}. ${esc(g.name)}</b> → 剩 ${fmt(g.kept, 0)} <span class="muted">· ${esc(g.why)}</span></summary>
+        ${g.dropped_examples.length ? g.dropped_examples.map(e => `<pre class="mono" style="margin:6px 0">${esc((e.instruction || '').slice(0, 120))}${e._tokens ? `  <span class="muted">（${e._tokens} token，超长）</span>` : ''}</pre>`).join('') : '<div class="muted" style="padding:4px 12px">这一步没有删除样本，或没有可展示的样例</div>'}</details>`).join('')}</div>
+    <div class="card" style="grid-column:1/-1"><h3>③ 模板与 ④ 分词：模型真正看到的东西</h3>
+      <p class="why">先用对话模板把一行数据拼成一段文本：<code>${esc(F.template)}</code>。再切成 token。<span style="box-shadow:inset 0 0 0 1.5px var(--s4);padding:0 3px;border-radius:3px">黄框</span> = 特殊标记；<span style="background:var(--surface-2);padding:0 3px">灰色</span> = 问题部分，<b>不算损失</b>（模型只是读）；<span style="background:color-mix(in srgb, var(--s1) 26%, transparent);padding:0 3px">蓝色</span> = 回答部分，<b>算损失</b>（模型要学着说出来）。悬停可看单个 token；"�" 是被拆开的半个汉字。</p>
+      ${F.examples.map(e => `<div class="toks" style="margin-bottom:12px">${e.prompt.map(t => tokSpan(t, false)).join('')}${e.answer.map(t => tokSpan(t, true)).join('')}</div>`).join('')}</div>
+    <div class="card"><h3>长度分布（token 数）</h3><p class="why">问题通常很短，回答长得多。超过 ${c.max_len} token 的样本已被删掉。</p><div id="lenQ"></div><div id="lenA" style="margin-top:10px"></div></div>
+    <div class="card"><h3>喂给模型的总量</h3><p class="why">训练时实际消耗了多少数据。</p>
+      ${tiles([['训练样本', fmt(L.stages.at(-1).kept, 0)], ['训练集 token', fmt(F.train_tokens, 1)], ['其中算损失的', fmt(100 * F.trained_token_frac, 0) + '%'], ['数据被看了几轮', F.epochs + ' 轮', '超过 1 轮就是在重复看']])}
+      <h3>⑦ 去向</h3><p class="why">${esc(L.destination.note)}</p><code>${esc(L.destination.adapter)}</code></div>
+  </div>`;
+  barChart($('funnel'), L.stages.map((g, i) => ({ label: `${i + 1}. ${g.name.slice(0, 18)}`, v: g.kept })), { valFmt: v => fmt(v, 0), labelW: 200 });
+  const bins = (h, lab, col) => { const w = (F.hist_range[1] - F.hist_range[0]) / h.length; return h.map((v, i) => ({ label: `${lab} ${i * w}–${(i + 1) * w}`, v, color: col })).filter(x => x.v > 0); };
+  barChart($('lenQ'), bins(F.prompt_len_hist, '问题', 'var(--text-muted)'), { valFmt: v => fmt(v, 0), labelW: 110 });
+  barChart($('lenA'), bins(F.answer_len_hist, '回答', 'var(--s1)'), { valFmt: v => fmt(v, 0), labelW: 110 });
+}
+
+function fBase(r) {
+  const c = r.config, a = c.base_arch, comp = c.base_components;
+  const mods = c.targets;
+  const rows = ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj'].map(m => {
+    const [o, i] = moduleShape(m, a), on = mods.includes(m);
+    return `<tr><td>${MOD_CN[m]} <code class="muted">${m}</code></td><td>${o} × ${i}</td><td>${fmt(o * i, 2)}</td>
+      <td>${on ? `A ${c.lora_r}×${i} + B ${o}×${c.lora_r}` : '<span class="muted">不插</span>'}</td><td>${on ? fmt(c.lora_r * (o + i), 2) : '–'}</td><td>${on ? fmt(100 * c.lora_r * (o + i) / (o * i), 2) + '%' : ''}</td></tr>`;
+  }).join('');
+  $('view').innerHTML = `
+  ${tiles([['基座', esc(c.base)], ['层数', a.layers], ['隐藏维度', a.hidden], ['注意力头', `${a.heads}（KV ${a.kv_heads}）`, '分组查询注意力 GQA：多个 Q 头共享一组 K/V，省显存'], ['词表', fmt(a.vocab, 1)], ['原始上下文', fmt(a.context, 0)]])}
+  <div class="grid">
+    <div class="card"><h3>LoRA 是怎么"改"模型的</h3><p class="why">全量微调要改全部 ${fmt(c.n_params, 2)} 个参数：慢、占显存，还容易把原有能力冲掉。LoRA 的做法是不碰原始权重 W，在旁边加一条"小路"。</p>
+      <pre class="mono">输出 = W·x  +  (alpha/r) · B·(A·x)
+       ↑ 冻结      ↑ 只训练这两个小矩阵
+W: 1024×3072 这样的大矩阵（几百万参数）
+A: r×输入维   B: 输出维×r     r = ${c.lora_r}，alpha = ${c.lora_alpha}
+B 初始为 0 → 第 0 步时模型和基座完全一样</pre>
+      <div id="trainFrac" style="margin-top:10px"></div></div>
+    ${c.special_info ? `<div class="card"><h3>${c.special_info.trainable ? '额外训练' : '对照组：不训练'} ${c.special_info.tokens.map(esc).join('、')} 的嵌入</h3><p class="why">基座里 &lt;|im_start|&gt;、&lt;|im_end|&gt; 和另外约 290 个保留标记的向量<b>完全相同</b>：它们是从没被训练过的占位向量（长度 ${c.special_info.norm_before?.map(v => fmt(v, 2)).join(' / ') ?? '0.35'}，普通 token 平均 ${fmt(c.special_info.avg_token_norm, 2)}）。嵌入矩阵同时也是输出层（权重共享），冻结的话，模型无法把"结束"和其他占位标记区分开，几乎说不出它。${c.special_info.trainable ? `所以给这 2 个标记各加一个可训练的修正向量，共 ${fmt(c.special_info.trainable, 0)} 个参数。下图是训练后的向量长度。` : '本实验<b>不训练</b>它们，用来和修复组对比。'}</p>
+      <div id="spNorm"></div></div>` : ''}
+    <div class="card"><h3>基座的参数花在哪</h3><p class="why">0.6B 级别的模型里，词嵌入占比很大（词表有 15 万个 token）。</p><div id="comp"></div></div>
+    <div class="card" style="grid-column:1/-1"><h3>每一层里插在哪里（每层都一样，共 ${a.layers} 层）</h3><p class="why">注意力里的 4 个投影决定"看哪里"；MLP 的 3 个投影负责"加工和存储知识"。</p>
+      <table><tr><th>模块</th><th>原始 W 形状</th><th>原始参数/层</th><th>LoRA 矩阵</th><th>新增参数/层</th><th>占比</th></tr>${rows}</table></div>
+  </div>`;
+  barChart($('trainFrac'), [{ label: '冻结（基座）', v: c.n_params, color: 'var(--text-muted)' }, { label: '可训练（LoRA）', v: c.n_trainable, color: 'var(--s1)' }], { valFmt: v => fmt(v, 2), labelW: 110 });
+  if (c.special_info?.trainable && r.snaps.length) loadSnap(S.focus, r.snaps.at(-1)).then(sn => barChart($('spNorm'), [
+    ...c.special_info.tokens.flatMap((t, i) => [{ label: `${t} 训练前`, v: c.special_info.norm_before[i], color: 'var(--text-muted)' }, { label: `${t} 第 ${sn.step} 步`, v: sn.special_norm?.[i] ?? 0, color: 'var(--s1)' }]),
+    { label: '普通 token 平均', v: c.special_info.avg_token_norm, color: 'var(--s3)' }], { valFmt: v => fmt(v, 3), labelW: 170 }));
+  barChart($('comp'), Object.entries(comp).map(([k, v]) => ({ label: k, v })), { valFmt: v => fmt(v, 1), labelW: 150 });
+}
+
+async function fTrain(r) {
+  const names = ftRuns().length ? ftRuns() : [S.focus];
+  await Promise.all(names.map(n => loadRun(n)));
+  $('view').innerHTML = `
+  <div class="hint">${names.length > 1 ? `正在叠加对比 ${names.length} 个微调。` : '左栏勾选其它微调可叠加对比。'}和从零训练相比，微调的损失起点低得多：基座早就会说话了，要学的只是"按指令回答"这件事。</div>
+  <div class="grid">
+    ${card('损失', '细线 = 训练批次（平滑），粗线 = 验证集。只算回答部分。', 'cLoss')}
+    ${card('学习率', '预热后余弦衰减。LoRA 常用的学习率（2e-4）比全量微调高 10 倍左右，因为只改很少的参数。', 'cLr')}
+    ${card('梯度范数（裁剪前）', '超过虚线的部分会被裁剪。', 'cGn')}
+    ${card('训练吞吐', '每秒处理的 token 数（含问题和回答）。', 'cTp')}
+  </div>`;
+  lossChart($('cLoss'), names);
+  lineChart($('cLr'), { series: names.map(n => ({ name: n, color: runColor(n), points: S.cache[n].metrics.map(m => [m.step, m.lr]) })), yLabel: '学习率', yFmt: v => v.toExponential(1) });
+  lineChart($('cGn'), { series: names.map(n => ({ name: n, color: runColor(n), points: S.cache[n].metrics.map(m => [m.step, m.grad_norm]) })), logY: true, yLabel: '梯度范数', refLine: r.config.grad_clip });
+  lineChart($('cTp'), { series: names.map(n => ({ name: n, color: runColor(n), points: S.cache[n].metrics.filter(m => m.step > 0).map(m => [m.step, m.tok_per_s]) })), yLabel: 'tok/s', yFmt: v => fmt(v, 0) });
+}
+
+async function fWhere(r) {
+  const steps = r.snaps;
+  if (!steps.length) { $('view').innerHTML = '<div class="empty">还没有评估快照</div>'; return; }
+  if (S.snapStep == null || !steps.includes(S.snapStep)) S.snapStep = steps.at(-1);
+  const all = await Promise.all(steps.map(s => loadSnap(S.focus, s)));
+  const snap = all[steps.indexOf(S.snapStep)], T = snap.targets, nL = snap.delta.length;
+  const M = T.map((_, j) => snap.delta.map(row => row[j]));
+  const fin = all.at(-1).delta.flat(), mx = Math.max(...fin, 1e-9), mn = Math.min(...fin);
+  $('view').innerHTML = `
+  <div class="card" style="margin-bottom:16px"><div class="row" style="margin:0"><b>评估时间轴</b>
+    <input type="range" min="0" max="${steps.length - 1}" value="${steps.indexOf(S.snapStep)}" style="flex:1" oninput="S.snapStep=${JSON.stringify(steps)}[this.value];$('snapLbl').textContent='第 '+S.snapStep+' 步'" onchange="render()"><b id="snapLbl">第 ${S.snapStep} 步</b></div></div>
+  <div class="grid">
+    <div class="card" style="grid-column:1/-1"><h3>改动地图：每层每个模块被改了多少（|ΔW| / |W|）</h3><p class="why">横轴是第 0–${nL - 1} 层（左边靠近输入，右边靠近输出），纵轴是插了 LoRA 的模块。颜色越深 = 这块权重相对原值被改得越多。最后一步的色阶从最小值到最大值，突出层与层之间的相对差异；拖动到更早的步数时色阶从 0 开始，可以看改动怎样一步步长出来。</p>
+      <div style="display:grid;grid-template-columns:90px 1fr;gap:6px;align-items:stretch">
+        <div style="display:flex;flex-direction:column;justify-content:space-around;font-size:11.5px" class="sec">${T.map(t => `<span>${MOD_CN[t]}</span>`).join('')}</div>
+        <div id="dmap"></div></div>
+      <div class="muted" style="font-size:11px;display:flex;justify-content:space-between;margin-left:96px"><span>第 0 层（输入侧）</span><span>第 ${nL - 1} 层（输出侧）</span></div></div>
+    ${card('各类模块的平均改动（随训练）', '哪类模块最"积极"地适应新任务。', 'dmod')}
+    ${card(`各层的总改动（第 ${S.snapStep} 步）`, '改动集中在哪几层：通常不是均匀分布的。', 'dlayer')}
+  </div>`;
+  const el = $('dmap');
+  heatmap(el, M, { maxV: mx, minV: S.snapStep === steps.at(-1) ? mn : 0, tipFn: (i, j, v) => `第 ${j} 层 · ${MOD_CN[T[i]]}<br>|ΔW|/|W| = <b>${fmt(100 * v, 3)}%</b>` });
+  const cv = el.querySelector('canvas'); cv.style.maxWidth = 'none'; cv.style.height = (T.length * 26) + 'px';
+  lineChart($('dmod'), { series: T.map((t, j) => ({ name: MOD_CN[t], color: `var(${SERIES[j % 8]})`, points: all.map(s => [s.step, 100 * s.delta.reduce((a, row) => a + row[j], 0) / nL]) })), yLabel: '平均 |ΔW|/|W| %', yFmt: v => fmt(v, 2) });
+  barChart($('dlayer'), snap.delta.map((row, i) => ({ label: `第 ${i} 层`, v: 100 * row.reduce((a, b) => a + b, 0) / row.length })), { valFmt: v => fmt(v, 3) + '%', labelW: 60 });
+}
+
+async function fImpact(r) {
+  const steps = r.snaps;
+  if (!steps.length) { $('view').innerHTML = '<div class="empty">还没有评估快照</div>'; return; }
+  if (S.snapStep == null || !steps.includes(S.snapStep)) S.snapStep = steps.at(-1);
+  const all = await Promise.all(steps.map(s => loadSnap(S.focus, s)));
+  const base = all[0], cur = all[steps.indexOf(S.snapStep)], ev0 = r.evals[0] || {};
+  const ref = r.config.ref_example;
+  const names = ftRuns().length ? ftRuns() : [S.focus];
+  await Promise.all(names.map(n => loadRun(n)));
+  $('view').innerHTML = `
+  <div class="hint">微调的影响有两面：<b>学到了什么</b>（指令回答更好）和<b>付出了什么</b>（通用能力是否变差，也就是"灾难性遗忘"）。第 0 步就是原始基座，所有变化都以它为参照。</div>
+  <div class="grid">
+    ${card('学到了：验证集回答损失', '200 条训练时没见过的指令。越低 = 回答越接近参考答案的写法。', 'iVal')}
+    ${card('付出了：通用文本损失变化（相对基座）', `${esc(Object.values(r.config.general_desc || {}).join('；') || '你自己的中文文档和 Python 代码')}。都不在训练数据里。高于 0 = 这方面的能力变差了。`, 'iGen')}
+    ${card('偏离度：与基座的 KL 散度', '在同样的普通文本（4 段中文文档 + 4 段代码）上，微调后模型和基座预测下一个词的分布差多远。越大 = 模型整体漂得越远；看它是持续上升还是趋于平稳。', 'iKl')}
+    ${card('行为：答完会停的比例', '8 个固定探针问题里，生成时主动输出 &lt;|im_end|&gt;（回答结束）的比例。基座复读后输出的文档结束符 &lt;|endoftext|&gt; 不算。', 'iStop')}
+    ${card('说出"结束"的概率（对数轴）', '参考答案末尾那个 &lt;|im_end|&gt; 的概率。勾选对照组 sft-no-special 叠加对比：不训练特殊标记，这个概率几乎升不起来。', 'iEnd')}
+  </div>
+  <div class="card" style="margin:16px 0"><div class="row" style="margin:0"><b>评估时间轴</b>
+    <input type="range" min="0" max="${steps.length - 1}" value="${steps.indexOf(S.snapStep)}" style="flex:1" oninput="S.snapStep=${JSON.stringify(steps)}[this.value];$('snapLbl').textContent='第 '+S.snapStep+' 步'" onchange="render()"><b id="snapLbl">第 ${S.snapStep} 步</b></div></div>
+  <div class="card" style="margin-bottom:16px"><h3>同一个参考答案，哪些词变得更可能 / 更不可能</h3>
+    <p class="why">测试集里的一条问答（训练中从未见过）。每个色块是参考答案里的一个 token：<span style="background:color-mix(in srgb, var(--s1) 45%, transparent);padding:0 3px">蓝</span> = 第 ${S.snapStep} 步的模型比基座更可能说出它；<span style="background:color-mix(in srgb, var(--s2) 45%, transparent);padding:0 3px">橙</span> = 更不可能。悬停看具体概率。</p>
+    <div class="muted" style="font-size:12px;margin-bottom:6px">问题：${esc(ref.prompt.join('').replace(/<\|im_(start|end)\|>(user|assistant)?\n?/g, ' ').trim())}</div>
+    <div class="toks" id="refDiff"></div></div>
+  <div class="card"><h3>探针问题：基座 vs 第 ${S.snapStep} 步</h3><p class="why">贪心解码（每步选最可能的词），最多 96 个 token。■ = 答完主动停下（&lt;|im_end|&gt;），◇ = 输出了文档结束符（不算答完），… = 被长度截断。</p>
+    <table><tr><th style="width:22%">问题</th><th>基座（第 0 步）</th><th>第 ${S.snapStep} 步</th></tr>
+    ${cur.probes.map((p, i) => `<tr><td style="vertical-align:top"><span class="pill">${esc(p.kind)}</span> ${esc(p.prompt)}</td>
+      <td style="vertical-align:top"><pre class="mono">${esc(base.probes[i].output)}${base.probes[i].stopped ? ' ■' : base.probes[i].stop === 'endoftext' ? ' ◇' : ' …'}</pre></td>
+      <td style="vertical-align:top"><pre class="mono">${esc(p.output)}${p.stopped ? ' ■' : p.stop === 'endoftext' ? ' ◇' : ' …'}</pre></td></tr>`).join('')}</table></div>`;
+  lineChart($('iVal'), { series: names.map(n => ({ name: n, color: runColor(n), points: S.cache[n].evals.map(e => [e.step, e.val_loss]) })), yLabel: 'val loss' });
+  const keys = Object.keys(ev0).filter(k => k.startsWith('general:'));
+  lineChart($('iGen'), { series: names.flatMap(n => keys.map((k, j) => ({ name: (names.length > 1 ? n + ' · ' : '') + k.slice(8), color: runColor(n), dash: j ? '5 4' : null, points: S.cache[n].evals.map(e => [e.step, 100 * (e[k] - S.cache[n].evals[0][k]) / S.cache[n].evals[0][k]]) }))), yLabel: '相对基座的变化 %', yFmt: v => fmt(v, 2) + '%', refLine: 0 });
+  lineChart($('iKl'), { series: names.map(n => ({ name: n, color: runColor(n), points: S.cache[n].evals.map(e => [e.step, e.kl_to_base]) })), yLabel: 'KL', yFmt: v => fmt(v, 4) });
+  const snapsOf = {};
+  for (const n of names) snapsOf[n] = await Promise.all(S.cache[n].snaps.map(st => loadSnap(n, st)));
+  lineChart($('iStop'), { series: names.map(n => ({ name: n, color: runColor(n), points: snapsOf[n].map(s => [s.step, 100 * s.probes.filter(p => p.stopped).length / s.probes.length]) })), yLabel: '%', yFmt: v => fmt(v, 0) + '%' });
+  lineChart($('iEnd'), { series: names.map(n => ({ name: n, color: runColor(n), points: snapsOf[n].map(s => [s.step, Math.max(1e-6, Math.exp(s.ref_logprobs.at(-1)))]) })), logY: true, yLabel: 'p(<|im_end|>)', yFmt: v => fmt(100 * v, 3) + '%' });
+  const d = cur.ref_logprobs.map((v, i) => v - base.ref_logprobs[i]);
+  const m = Math.max(...d.map(Math.abs), 1e-6);
+  $('refDiff').innerHTML = ref.answer.map((t, i) => { const v = d[i] ?? 0, col = v >= 0 ? '--s1' : '--s2';
+    return `<span style="background:color-mix(in srgb, var(${col}) ${Math.round(60 * Math.abs(v) / m)}%, transparent)" data-tip="「${esc(visTok(t))}」<br>基座概率 ${fmt(100 * Math.exp(base.ref_logprobs[i]), 1)}% → 现在 ${fmt(100 * Math.exp(cur.ref_logprobs[i]), 1)}%">${visTok(t)}</span>`; }).join('');
+}
+
+function mbtiInterp(r, ev, ev0, card0) {
+  const out = [], E = r.evals.filter(e => e.val_unseen_loss != null);
+  if (!ev || ev.step === 0) return ['这是第 0 步（原始基座），拖动下方时间轴看训练后的变化。'];
+  const best = E.reduce((a, e) => e.val_unseen_loss < a.val_unseen_loss ? e : a, E[0]);
+  const gap0 = ev0.val_unseen_loss - ev0.val_loss, gap = ev.val_unseen_loss - ev.val_loss;
+  out.push(`<b>学到了没有：</b>没见过的问题上，回答损失 ${fmt(ev0.val_unseen_loss, 3)} → ${fmt(ev.val_unseen_loss, 3)}。${ev.val_unseen_loss < ev0.val_unseen_loss - 0.3 ? '明显下降：学到的是"怎么回答"，不只是记住了某几道题。' : '下降不多。'}`);
+  out.push(`<b>有没有背题：</b>两种验证集的差距从 ${fmt(gap0, 3)} 变成 ${fmt(gap, 3)}。${gap - gap0 > 0.1 ? '差距在扩大：开始记具体问题的答案了（过拟合）。' : '差距没有明显扩大：还没开始背题。'}${best.step < ev.step && ev.val_unseen_loss - best.val_unseen_loss > 0.03 ? ` 没见过问题的损失在第 ${best.step} 步最低（${fmt(best.val_unseen_loss, 3)}），之后回升了 ${fmt(ev.val_unseen_loss - best.val_unseen_loss, 3)}：<b>再训下去收益为负，应在那附近停</b>。` : ''}`);
+  if (ev.disc) out.push(`<b>分得清人格吗：</b>判型命中 ${fmt(100 * ev.disc.top1, 0)}%，原始基座 ${fmt(100 * ev0.disc.top1, 0)}%${card0.top1 != null ? `、基座 + 人设卡 ${fmt(100 * card0.top1, 0)}%` : ''}（随机 6%）。${card0.top1 != null && ev.disc.top1 - card0.top1 > 0.2 ? '微调学到的人格口吻比"只给一张人设卡"贴近得多：这是微调的真实价值。' : ''}注意：这测的是"贴近教师按型写的回答"，不等于人觉得像。`);
+  if (ev.memo_rate != null) out.push(`<b>是不是在照抄：</b>生成回答里 ${fmt(100 * ev.memo_rate, 0)}% 的 8 字片段能在训练集找到原句，${ev.memo_high ? ev.memo_high + ' 条超过一半是原句' : '没有整段照抄的'}。${ev.memo_rate < 0.2 ? '基本是自己组织的话。' : '照抄偏多，要警惕。'}`);
+  const zh = k => ev0[k] ? 100 * (ev[k] - ev0[k]) / ev0[k] : null, z = zh('general:中文文档');
+  if (z != null) out.push(`<b>代价：</b>普通中文文档的损失变化 ${z >= 0 ? '+' : ''}${fmt(z, 1)}%，与基座的偏离 KL ${fmt(ev.kl_to_base, 3)}。${z > 3 ? '通用能力开始明显变差：训得越久，遗忘越多。' : '通用能力基本没受影响。'}`);
+  return out;
+}
+
+// ------------------------------------------------------------------ MBTI 人格诊断（用户 v6 训练集）
+async function fMbti(r) {
+  const steps = r.snaps;
+  if (!steps.length) { $('view').innerHTML = '<div class="empty">还没有评估快照</div>'; return; }
+  if (S.snapStep == null || !steps.includes(S.snapStep)) S.snapStep = steps.at(-1);
+  const names = (ftRuns().length ? ftRuns() : [S.focus]).filter(n => S.runs.find(x => x.name === n));
+  await Promise.all(names.map(n => loadRun(n)));
+  const mb = names.filter(n => S.cache[n].config?.mbti);
+  const all = await Promise.all(steps.map(s => loadSnap(S.focus, s)));
+  const base = all[0], cur = all[steps.indexOf(S.snapStep)];
+  const M = r.lineage?.mbti || {}, ev0 = r.evals[0] || {}, ev = r.evals.find(e => e.step === S.snapStep) || r.evals.at(-1) || {};
+  const ep = n => { const c = S.cache[n].config; return s => s * c.batch_size * c.grad_accum / c.data_report.train_examples; };
+  const card0 = ev0.disc_card || {};
+  const AX = ['E/I', 'S/N', 'T/F', 'J/P'];
+  $('view').innerHTML = `
+  <div class="hint"><b>要回答的问题：</b>v6 人工盲审里 160 条有 123 条跑题。是不是模型在<b>背题</b>？这份数据去掉人格标签后只有 <b>${M.n_groups}</b> 个不同的开场问题，训练集里平均每个问题出现 <b>${M.mean_rows_per_group}</b> 次（16 种人格各答一遍还不止）。v6 按"条"随机切验证集，验证集里的问题训练时<b>都见过</b>（本实验复刻：${M.seen_val_overlap}/${M.seen_val_n} 条），所以 val loss 看不出死记硬背。这里另外整组留出 ${M.n_unseen_groups} 个问题（${M.unseen_n} 条），训练中从不出现。<br>下面的指标都不用 LLM 判官，结果可以完全复现。横轴是"数据看了几轮"（epoch），方便把不同长度的训练放在一起比。左栏同时勾选 mbti-1ep 和 mbti-4ep 叠加对比。</div>
+  ${tiles([
+    ['不同的开场问题', fmt(M.n_groups, 0), `训练集用到 ${M.train_groups} 个`],
+    ['每个问题平均出现', `${M.mean_rows_per_group} 次`, '同一问题、不同人格、不同回答'],
+    ['见过的问题 → 验证损失', `${fmt(ev0.val_loss, 3)} → ${fmt(ev.val_loss, 3)}`, `第 0 步 → 第 ${ev.step} 步（复刻 v6 的验证集）`],
+    ['没见过的问题 → 验证损失', `${fmt(ev0.val_unseen_loss, 3)} → ${fmt(ev.val_unseen_loss, 3)}`, '真正的泛化能力'],
+    ['型可分度 top-1', `${fmt(100 * (ev.disc?.top1 ?? NaN), 1)}%`, `随机 6.25% · 基座+标签 ${fmt(100 * (ev0.disc?.top1 ?? NaN), 1)}% · 基座+人设卡 ${fmt(100 * (card0.top1 ?? NaN), 1)}%`],
+    ['生成回答的背诵率', `${fmt(100 * (ev.memo_rate ?? NaN), 1)}%`, `8 字片段能在训练集回答里原样找到的比例；≥50% 的 ${ev.memo_high ?? '–'}/${cur.probes.length} 条`],
+  ])}
+  <div class="card" style="margin:16px 0"><h3>自动解读（第 ${ev.step} 步，约 ${fmt(ep(S.focus)(ev.step), 2)} 轮）</h3><p class="why">按固定规则从上面的数字生成，换一个评估点会跟着变。样本小（判型 48 条、生成 12 条），只看方向。</p><ul style="margin:0 0 0 18px">${mbtiInterp(r, ev, ev0, card0).map(x => `<li style="margin:4px 0">${x}</li>`).join('')}</ul></div>
+  <div class="grid">
+    ${card('背题检测：见过的问题 vs 没见过的问题', '实线 = 见过的问题（v6 当时看的就是这条）；虚线 = 没见过的问题。两条线张开 = 模型在记具体问题的答案，而不是学会怎么回答。', 'mVal')}
+    ${card('型可分度：模型分得清 16 种人格吗', `从没见过的问题里，每型取 ${S.cache[S.focus].config.disc_per_type} 条单轮参考回答，共 ${r.config.mbti?.disc_n} 条。把同一条回答分别放在 16 种人格标签后面，看哪个标签让模型觉得它最可能。命中率越高 = 模型越清楚"这种人格会怎么说"。虚线 = 基座 + 你的人设卡（v6 项目里的"②臂"）。随机 6.25%。`, 'mDisc')}
+    ${card('背诵率：生成的回答有多少是训练集原句', `${cur.probes.length} 个没见过的问题，贪心解码生成回答，再看回答里的 8 字片段有多少能在训练集回答里原样找到。越高 = 越像在套用背过的句子。`, 'mMemo')}
+    ${card('切题度：回答和问题对得上吗', '用原始基座给生成的回答打分：配自己的问题 vs 配另一个问题，平均每个 token 的对数概率高多少。越高 = 越切题；接近 0 = 回答放到哪个问题后面都一样（跑题）。注意第 0 步的基座只会复读问题，所以分数虚高，只作参考。', 'mRel')}
+    ${card(`四个维度分别分得清吗（第 ${S.snapStep} 步）`, '把 16 选 1 拆成四个二选一：模型判的人格和真实人格在这个维度上是否一致。随机 50%。', 'mAxes')}
+    ${card(`模型最常判成哪种人格（第 ${S.snapStep} 步）`, `${r.config.mbti?.disc_n} 条回答被判成各型的次数；理想情况每型 ${S.cache[S.focus].config.disc_per_type} 次。某一型特别多 = 模型有偏好（v6 的 LLM 判官就偏爱 ENFJ）。`, 'mPred')}
+  </div>
+  <div class="card" style="margin:16px 0"><div class="row" style="margin:0"><b>评估时间轴</b>
+    <input type="range" min="0" max="${steps.length - 1}" value="${steps.indexOf(S.snapStep)}" style="flex:1" oninput="S.snapStep=${JSON.stringify(steps)}[this.value];$('snapLbl').textContent='第 '+S.snapStep+' 步'" onchange="render()"><b id="snapLbl">第 ${S.snapStep} 步（约 ${fmt(ep(S.focus)(S.snapStep), 2)} 轮）</b></div></div>
+  <div class="card"><h3>没见过的问题：基座 vs 第 ${S.snapStep} 步</h3><p class="why">贪心解码，最多 128 个 token。■ = 答完主动停下，… = 被截断。<b>背诵</b> = 回答里能在训练集原样找到的 8 字片段比例（≥50% 标红）；<b>切题</b> = 上面的切题度分数。</p>
+    <table><tr><th style="width:18%">人格 · 问题</th><th>基座（第 0 步）</th><th>第 ${S.snapStep} 步</th><th style="width:70px">背诵</th><th style="width:60px">切题</th></tr>
+    ${cur.probes.map((p, i) => `<tr><td style="vertical-align:top"><span class="pill">${esc(p.kind)}</span> ${esc(p.body || p.prompt)}</td>
+      <td style="vertical-align:top"><pre class="mono">${esc(base.probes[i].output.slice(0, 160))}${base.probes[i].stopped ? ' ■' : ' …'}</pre></td>
+      <td style="vertical-align:top"><pre class="mono">${esc(p.output)}${p.stopped ? ' ■' : ' …'}</pre></td>
+      <td style="vertical-align:top;${(p.memo ?? 0) >= 0.5 ? 'color:var(--bad);font-weight:600' : ''}">${fmt(100 * (p.memo ?? 0), 0)}%</td><td style="vertical-align:top">${p.rel == null ? '–' : fmt(p.rel, 2)}</td></tr>`).join('')}</table></div>`;
+  lineChart($('mVal'), { xLabel: '轮（epoch）', yLabel: 'val loss', series: mb.flatMap(n => [
+    { name: n + ' · 见过的问题', color: runColor(n), points: S.cache[n].evals.map(e => [ep(n)(e.step), e.val_loss]) },
+    { name: n + ' · 没见过的问题', color: runColor(n), dash: '5 4', points: S.cache[n].evals.filter(e => e.val_unseen_loss != null).map(e => [ep(n)(e.step), e.val_unseen_loss]) }]) });
+  lineChart($('mDisc'), { xLabel: '轮（epoch）', yLabel: 'top-1 命中率', yFmt: v => fmt(100 * v, 0) + '%', refLine: card0.top1 ?? null,
+    series: mb.map(n => ({ name: n, color: runColor(n), points: S.cache[n].evals.filter(e => e.disc).map(e => [ep(n)(e.step), e.disc.top1]) })) });
+  lineChart($('mMemo'), { xLabel: '轮（epoch）', yLabel: '背诵率', yFmt: v => fmt(100 * v, 0) + '%',
+    series: mb.map(n => ({ name: n, color: runColor(n), points: S.cache[n].evals.filter(e => e.memo_rate != null).map(e => [ep(n)(e.step), e.memo_rate]) })) });
+  lineChart($('mRel'), { xLabel: '轮（epoch）', yLabel: '切题度', yFmt: v => fmt(v, 2), refLine: 0,
+    series: mb.map(n => ({ name: n, color: runColor(n), points: S.cache[n].evals.filter(e => e.relevance != null).map(e => [ep(n)(e.step), e.relevance]) })) });
+  barChart($('mAxes'), AX.flatMap((a, k) => [
+    { label: `${a} · 基座+人设卡`, v: 100 * (card0.axes?.[k] ?? 0), color: 'var(--text-muted)' },
+    { label: `${a} · 第 ${ev.step} 步`, v: 100 * (ev.disc?.axes?.[k] ?? 0), color: 'var(--s1)' }]), { valFmt: v => fmt(v, 0) + '%', labelW: 150 });
+  barChart($('mPred'), Object.entries(ev.disc?.pred_counts || {}).map(([k, v]) => ({ label: k, v })), { valFmt: v => fmt(v, 0), labelW: 60 });
+}
+
+// ------------------------------------------------------------------ 7B 单变量实验（mlx）：说明、自动解读、总表
+const x7Runs = () => S.runs.filter(x => x.kind === 'mlx7b').map(x => x.name);
+function x7Verdict(e, b) {
+  // 和同一提示格式下的基座（第 0 步）比，给出一句话判断 + 逐条理由
+  if (!e || !b || e.step === 0) return { v: '基座', cls: '', why: [] };
+  const why = [], bad = [], good = [];
+  const dN = e.val_nll - b.val_nll;
+  if (dN > 0.02) bad.push(`留出回答损失 ${fmt(b.val_nll, 3)} → ${fmt(e.val_nll, 3)}，<b>比训练前还差</b>：模型先被改坏了，还没学到东西`);
+  else if (dN < -0.05) good.push(`留出回答损失 ${fmt(b.val_nll, 3)} → ${fmt(e.val_nll, 3)}：对没见过的回答也更会"说"了`);
+  else why.push(`留出回答损失 ${fmt(b.val_nll, 3)} → ${fmt(e.val_nll, 3)}：基本没变，还没学到多少`);
+  const rr = e.relevance / Math.max(1e-6, b.relevance);
+  if (rr < 0.5) bad.push(`切题度 ${fmt(b.relevance, 2)} → ${fmt(e.relevance, 2)}（只剩基座的 ${fmt(100 * rr, 0)}%）：<b>答非所问</b>`);
+  else if (rr >= 0.75) good.push(`切题度 ${fmt(e.relevance, 2)}（基座 ${fmt(b.relevance, 2)}）：回答仍然对得上问题`);
+  else why.push(`切题度 ${fmt(b.relevance, 2)} → ${fmt(e.relevance, 2)}：有所下降，需要看具体回答`);
+  if (e.card_word_hits >= 3) bad.push(`${e.card_word_hits}/${e.n_gen} 条回答里出现人设卡的指令词（如"接住""顶嘴"）：<b>把设定当台词念</b>`);
+  else if (e.card_word_hits === 0) good.push('没有出现人设卡指令词');
+  if (e.repeat_hits >= 3) bad.push(`${e.repeat_hits}/${e.n_gen} 条回答在复读`);
+  if (e.tic_hits >= 6) why.push(`"先别急"出现在 ${e.tic_hits}/${e.n_gen} 条（v8 训练回答里本来就占 36%，是教师的口头禅，属于数据问题）`);
+  const dd = e.disc.top1 - b.disc.top1;
+  (dd >= 0.1 ? good : dd <= -0.08 ? bad : why).push(`型贴近度 ${fmt(100 * b.disc.top1, 0)}% → ${fmt(100 * e.disc.top1, 0)}%（48 条，±13pp 内算噪声）`);
+  const v = bad.length >= 2 || rr < 0.5 ? '退化' : bad.length ? '有隐患' : good.length >= 2 ? '健康' : '待定';
+  return { v, cls: { 退化: 'failed', 有隐患: 'stale', 健康: 'done', 待定: '' }[v], why: [...bad.map(x => '✗ ' + x), ...good.map(x => '✓ ' + x), ...why.map(x => '· ' + x)] };
+}
+const x7Ev = r => ({ b: r.evals.find(e => e.step === 0), last: r.evals.filter(e => e.step > 0).at(-1) });
+
+async function xOverview(r) {
+  const c = r.config, st = r.summary.status || {}, X = c.explain || {}, { b, last } = x7Ev(r);
+  const steps = r.evals.filter(e => e.step > 0);
+  const base0 = S.runs.find(x => x.kind === 'mlx7b' && x.variant === 'V0');
+  const names = [...new Set([S.focus, ...[...S.compare].filter(n => S.runs.find(x => x.name === n)?.kind === 'mlx7b')])];
+  await Promise.all(names.map(n => loadRun(n)));
+  const rcRows = Object.entries(c.recipe).filter(([k]) => !['iters', 'save_every', 'seed'].includes(k)).map(([k, v]) => {
+    const changed = k in (c.change || {});
+    const lab = { num_layers: '插 LoRA 的层数', batch_size: 'batch', learning_rate: '学习率', lr_schedule: '学习率走法', rank: 'LoRA 秩', scale: 'LoRA 缩放', max_seq_length: '最长 token', fmt: '人设卡位置', base: '基座精度', adam_bias_correction: 'Adam 偏差修正' }[k] || k;
+    const show = v => v == null ? '恒定（无预热）' : typeof v === 'object' ? `预热 ${v.warmup} 步 → 余弦降到 ${v.arguments[2]}` : k === 'fmt' ? (v === 'system' ? 'system 消息' : '用户消息里') : k === 'base' ? (v === 'bf16' ? 'bf16 原版' : '8 位量化') : k === 'adam_bias_correction' ? (v ? '开' : '关（mlx 默认）') : v;
+    return `<tr style="${changed ? 'background:color-mix(in srgb, var(--s1) 14%, transparent)' : ''}"><td>${lab}</td><td>${changed ? '<b>' + esc(String(show(v))) + '</b> ← 本实验只改这一项' : esc(String(show(v)))}</td></tr>`;
+  }).join('');
+  $('view').innerHTML = `
+  <div class="hint"><b>${esc(c.variant)} · ${esc(c.title)}</b>　这是 7B 单变量实验中的一个：数据（${esc(c.data)}）和其它配置都固定，<b>一次只改一个变量</b>，所以结果的差别只能来自这一项。每 ${c.recipe.save_every} 步存一个 checkpoint，用同一套不依赖 LLM 判官的指标早筛：坏了就停，不浪费 2 小时跑满。</div>
+  <div class="grid">
+    <div class="card"><h3>做了什么</h3><p>${esc(X.what)}</p><h3 style="margin-top:12px">为什么做</h3><p>${esc(X.why)}</p></div>
+    <div class="card"><h3>预期（先写下来，再看证据）</h3><p>${esc(X.hypothesis)}</p><h3 style="margin-top:12px">这个实验的价值</h3><p>${esc(X.value)}</p></div>
+  </div>
+  <div class="card" style="margin:16px 0"><h3>自动解读</h3><p class="why">规则：和<b>同一提示格式下的原始基座</b>（第 0 步）比。留出回答损失升高 &gt; 0.02 = 被改坏；切题度跌破基座一半 = 答非所问；≥3/12 条出现人设卡指令词 = 把设定当台词。样本小（48 条判型、12 条生成），只看方向。</p>
+    ${st.state !== 'done' ? `<div class="muted">实验还在进行：${esc(st.phase || st.state || '')}${st.step ? `（第 ${st.step}/${c.max_steps} 步）` : ''}。下面先显示已有的结果。</div>` : ''}
+    ${steps.length ? steps.map(e => { const V = x7Verdict(e, b); return `<div style="margin:10px 0"><b>第 ${e.step} 步</b> <span class="pill ${V.cls}">${V.v}</span><ul style="margin:6px 0 0 18px">${V.why.map(w => `<li>${w}</li>`).join('')}</ul></div>`; }).join('') : '<div class="muted">还没有 checkpoint 的评估结果</div>'}
+    ${steps.length && st.state === 'done' ? `<div style="margin-top:10px;padding:10px;border-radius:8px;background:var(--surface-2)"><b>对假设的回答：</b>${x7Answer(r)}</div>` : ''}
+  </div>
+  <div class="grid">
+    <div class="card"><h3>配方（相对原项目 v8）</h3><p class="why">高亮的一行是本实验唯一改动的地方。</p><table>${rcRows}</table></div>
+    ${card('留出回答损失（越低越好）', 'v8 验证集 48 条回答在各自人设卡下的平均每 token 负对数概率。第 0 步 = 原始基座。曲线先升后降 = 训练初期把模型改坏了。左栏勾选其它 7B 实验可叠加对比。', 'xNll')}
+    ${card('切题度（越高越好）', '用原始基座给生成的回答打分：配自己的问题 vs 配别的问题，概率高多少。跌到接近 0 = 回答放到哪个问题后面都一样。', 'xRel')}
+    ${card('型贴近度 top-1', '同一条回答放在 16 张人设卡后面，哪张卡让模型觉得最可能。随机 6.25%；48 条样本，差距 13pp 以内看不出来。', 'xDisc')}
+    ${card('人设卡指令词泄漏（12 条里几条）', '回答里出现"接住""顶嘴""和稀泥"等人设卡里的指令词：说明模型把"设定"当成了"台词"。', 'xLeak')}
+  </div>`;
+  const ser = key => names.map(n => ({ name: n, color: runColor(n), points: S.cache[n].evals.map(e => [e.step, typeof key === 'function' ? key(e) : e[key]]) }));
+  lineChart($('xNll'), { series: ser('val_nll'), yLabel: '每 token 负对数概率' });
+  lineChart($('xRel'), { series: ser('relevance'), yLabel: '切题度', refLine: 0, yFmt: v => fmt(v, 2) });
+  lineChart($('xDisc'), { series: ser(e => e.disc.top1), yLabel: 'top-1', yFmt: v => fmt(100 * v, 0) + '%', refLine: 1 / 16 });
+  lineChart($('xLeak'), { series: ser('card_word_hits'), yLabel: '条', yFmt: v => fmt(v, 0) });
+}
+function x7Answer(r) {
+  const { b, last } = x7Ev(r), V = x7Verdict(last, b), c = r.config;
+  const v0 = S.cache[S.runs.find(x => x.kind === 'mlx7b' && x.variant === 'V0')?.name];
+  const v0l = v0 && x7Ev(v0).last;
+  const cmp = c.variant !== 'V0' && v0l ? `和对照组 V0 同一步（第 ${v0l.step} 步）相比：留出损失 ${fmt(v0l.val_nll, 3)} → ${fmt(last.val_nll, 3)}，切题度 ${fmt(v0l.relevance, 2)} → ${fmt(last.relevance, 2)}，人设卡指令词 ${v0l.card_word_hits} → ${last.card_word_hits} 条。` : '';
+  const verdictTxt = { 健康: '这一项改动让 7B 在第 ' + last.step + ' 步保持健康', 退化: '这一项改动<b>没有</b>阻止退化', 有隐患: '有改善但仍有隐患', 待定: '信号不明确' }[V.v];
+  return c.variant === 'V0' ? (V.v === '退化' || V.v === '有隐患' ? `复现成功：原配方第 ${last.step} 步${V.v === '退化' ? '已经退化' : '出现隐患'}，后面的实验和它比才有意义。` : `<b>没有复现</b>原配方的退化（第 ${last.step} 步判为「${V.v}」）：原训练当时可能还有别的问题，后面的对比要谨慎解读。`)
+    : `${verdictTxt}。${cmp}${V.v === '健康' ? '这说明「' + esc(c.title) + '」是退化的主要原因之一，值得跑满 1 轮确认。' : ''}`;
+}
+
+async function xTrain(r) {
+  const names = [...new Set([S.focus, ...[...S.compare].filter(n => S.runs.find(x => x.name === n)?.kind === 'mlx7b')])];
+  await Promise.all(names.map(n => loadRun(n)));
+  const m = r.metrics.filter(x => x.loss != null), b = r.evals.find(e => e.step === 0);
+  const early = m.filter(x => x.step <= 50), peak = early.length ? Math.max(...early.map(x => x.loss)) : null;
+  $('view').innerHTML = `
+  <div class="hint">训练曲线来自 mlx_lm 自己的日志。看两件事：① <b>开头有没有冲高</b>：训练损失如果在前几十步明显高于基座的起点，说明一开始的更新太猛，把模型"打坏"了再慢慢修；② 训练损失降了，但留出回答损失和生成质量不一定跟着变好（见「实验说明与解读」）。</div>
+  ${tiles([['基座起点（留出回答损失）', fmt(b?.val_nll, 3), '第 0 步，我们自己测的'], ['前 50 步最高训练损失', fmt(peak, 3), peak && b ? (peak > b.val_nll + 0.5 ? '<span style="color:var(--bad)">明显高于起点：开头被打坏</span>' : '没有明显冲高') : ''],
+    ['训练用时', fmt(r.summary.status?.train_secs, 0) + ' s', `${r.config.recipe.iters} 步`], ['吞吐', fmt(m.at(-1)?.tok_per_s, 0) + ' tok/s', 'mlx 日志']])}
+  <div class="grid">
+    ${card('训练损失（每 10 步平均）', '虚线 = 基座在留出回答上的起点。叠加其它 7B 实验对比开头那一段。', 'xtLoss')}
+    ${card('mlx 自带的验证损失（每 100 步）', 'mlx_lm 在 v8 验证集上算的损失（25 个 batch），和我们的留出回答损失口径接近但不完全相同。', 'xtVal')}
+  </div>`;
+  lineChart($('xtLoss'), { series: names.map(n => ({ name: n, color: runColor(n), points: S.cache[n].metrics.filter(x => x.loss != null).map(x => [x.step, x.loss]) })), yLabel: '训练损失', refLine: b?.val_nll });
+  lineChart($('xtVal'), { series: names.map(n => ({ name: n, color: runColor(n), points: S.cache[n].metrics.filter(x => x.val_loss_mlx != null).map(x => [x.step, x.val_loss_mlx]) })), yLabel: 'val loss' });
+}
+
+async function xGens(r) {
+  const steps = r.snaps;
+  if (!steps.length) { $('view').innerHTML = '<div class="empty">还没有评估快照</div>'; return; }
+  if (S.snapStep == null || !steps.includes(S.snapStep)) S.snapStep = steps.at(-1);
+  const all = await Promise.all(steps.map(s => loadSnap(S.focus, s)));
+  const base = all[0], cur = all[steps.indexOf(S.snapStep)];
+  const flag = p => [p.card_words?.length ? `<span class="pill failed">卡词：${p.card_words.map(esc).join('、')}</span>` : '', p.repeat ? '<span class="pill failed">复读</span>' : '', p.tic ? '<span class="pill stale">先别急</span>' : ''].join(' ');
+  $('view').innerHTML = `
+  <div class="card" style="margin-bottom:16px"><div class="row" style="margin:0"><b>checkpoint</b>
+    <input type="range" min="0" max="${steps.length - 1}" value="${steps.indexOf(S.snapStep)}" style="flex:1" onchange="S.snapStep=${JSON.stringify(steps)}[this.value];render()"><b>第 ${S.snapStep} 步</b></div></div>
+  <div class="card"><h3>12 个没见过的问题：基座 vs 第 ${S.snapStep} 步</h3><p class="why">同一张人设卡、同样的采样设置（${esc(r.config.eval_desc?.decode || '')}）。红色标签 = 退化信号；"切题"是用基座算的切题度，越高越好。</p>
+    <table><tr><th style="width:16%">人格 · 问题</th><th>基座</th><th>第 ${S.snapStep} 步</th><th style="width:60px">切题</th></tr>
+    ${cur.probes.map((p, i) => `<tr><td style="vertical-align:top"><span class="pill">${esc(p.kind)}</span> ${esc(p.body)}</td>
+      <td style="vertical-align:top"><pre class="mono">${esc(base.probes[i].output)}</pre></td>
+      <td style="vertical-align:top"><pre class="mono">${esc(p.output)}</pre>${flag(p)}</td><td style="vertical-align:top">${fmt(p.rel, 2)}</td></tr>`).join('')}</table></div>`;
+}
+
+async function xMatrix(r) {
+  const names = x7Runs();
+  await Promise.all(names.map(n => loadRun(n)));
+  const rows = names.map(n => S.cache[n]).sort((a, b) => a.config.variant.localeCompare(b.config.variant));
+  $('view').innerHTML = `
+  <div class="hint"><b>单变量实验总表。</b>每一行只改了一个变量，其余和 V0（原项目 v8 的配方）完全相同；数据都是 v8 noGate。判定按「实验说明与解读」里的规则自动给出，点行名可进入该实验。</div>
+  <div class="card"><table><tr><th>实验</th><th>改了什么</th><th>第 0 步（基座）</th>${[200, 400].map(s => `<th>第 ${s} 步</th>`).join('')}<th>对假设的回答</th></tr>
+  ${rows.map(x => { const b = x.evals.find(e => e.step === 0);
+    const cell = s => { const e = x.evals.find(e => e.step === s); if (!e) return `<td class="muted">${x.summary.status?.state === 'done' ? '–' : '进行中'}</td>`; const V = x7Verdict(e, b);
+      return `<td><span class="pill ${V.cls}">${V.v}</span><div class="muted" style="font-size:11.5px">损失 ${fmt(e.val_nll, 3)} · 切题 ${fmt(e.relevance, 2)} · 卡词 ${e.card_word_hits}/12 · 判型 ${fmt(100 * e.disc.top1, 0)}%</div></td>`; };
+    return `<tr><td><a href="#" onclick="focusRun('${x.config.name}');return false" style="color:var(--accent)">${esc(x.config.variant)}</a></td><td>${esc(x.config.title)}</td>
+      <td class="muted" style="font-size:11.5px">${b ? `损失 ${fmt(b.val_nll, 3)} · 切题 ${fmt(b.relevance, 2)} · 判型 ${fmt(100 * b.disc.top1, 0)}%` : '–'}</td>${[200, 400].map(cell).join('')}
+      <td style="font-size:12.5px">${x.summary.status?.state === 'done' ? x7Answer(x) : '<span class="muted">还没跑完</span>'}</td></tr>`; }).join('')}</table></div>
+  <div class="card" style="margin-top:16px"><h3>怎么读这张表</h3><p>· 先看 V0：它复现了原配方的退化，后面每一行和它比才有意义。<br>· 某一行从「退化」变成「健康」，说明它改的那一项是退化的原因（之一）。<br>· 几行都还是「退化」，说明那几项不是主因，可以从嫌疑名单里划掉——这同样是有价值的结论。<br>· 样本小：判型 48 条、生成 12 条，单个随机种子。确定主因后，应该再换种子、跑满 1 轮确认。</p></div>`;
+}
+
+function fChat(r) {
+  const done = !!r.summary.status?.adapter_bytes;
+  $('view').innerHTML = `
+  <div class="card" style="margin-bottom:16px"><h3>同一个问题，分别问基座和微调后的模型</h3>
+    <p class="why">${done ? '同一份基座权重：左边关掉 LoRA，右边打开 LoRA。唯一的差别就是这次训练出来的那几 MB 参数。每个 token 的底色越深 = 模型越有把握；悬停看前 5 个候选。' : '训练结束、保存 adapter 后可用。'}</p>
+    <div class="row"><input id="cPrompt" style="flex:1" value="请用通俗的话解释一下什么是 LoRA 微调。">
+      温度 <input id="cTemp" type="number" step="0.1" value="0" style="width:60px">
+      <button class="primary" ${done ? '' : 'disabled'} onclick="doChat()">提问</button></div></div>
+  <div class="grid"><div class="card"><h3>基座（LoRA 关）</h3><div id="cBase" class="toks gen"></div></div><div class="card"><h3>微调后（LoRA 开）</h3><div id="cFt" class="toks gen"></div></div></div>`;
+}
+async function doChat() {
+  const body = { run: S.focus, prompt: $('cPrompt').value, temperature: +$('cTemp').value, max_new: 200 };
+  const show = (id, g) => $(id).innerHTML = g.steps.map(s => `<span class="tk" style="background:color-mix(in srgb, var(--s1) ${Math.round(8 + 55 * s.p)}%, transparent)" data-tip="「${esc(visTok(s.token))}」 p=${fmt(s.p, 3)}<br>${s.alts.map(a => `${esc(visTok(a.t))} : ${fmt(100 * a.p, 1)}%`).join('<br>')}">${visTok(s.token)}</span>`).join('') || '<span class="muted">（空）</span>';
+  for (const [id, on] of [['cBase', false], ['cFt', true]]) {
+    $(id).innerHTML = '<span class="muted">生成中…（第一次需要加载模型，约 10 秒）</span>';
+    try { show(id, await api('/api/chat', { ...body, use_lora: on })); } catch (e) { $(id).innerHTML = `<span style="color:var(--bad)">${esc(e.message)}</span>`; }
+  }
+}
+
+// ------------------------------------------------------------------ 新实验
+const FIELDS = [['dataset', '数据集', ['pycode', 'pycode-large', 'custom', 'modadd']], ['tokenizer', '分词器', ['bpe', 'char']], ['vocab_size', 'BPE 词表'],
+  ['n_layer', '层数'], ['n_head', '注意力头'], ['n_embd', '隐藏维度'], ['block_size', '上下文长度'], ['dropout', 'dropout'], ['batch_size', 'batch'],
+  ['max_steps', '训练步数'], ['lr', '学习率'], ['min_lr', '最低学习率'], ['warmup', '预热步数'], ['weight_decay', '权重衰减'], ['grad_clip', '梯度裁剪'],
+  ['beta2', 'Adam β2'], ['seed', '随机种子'], ['eval_every', '每 N 步评估'], ['p', '模数 p（modadd）'], ['train_frac', '训练比例（modadd）']];
+const FT_FIELDS = [['n_train', '训练样本数'], ['n_val', '验证样本数'], ['max_len', '最大长度（token）'], ['lora_r', 'LoRA 秩 r'], ['lora_alpha', 'LoRA alpha'],
+  ['targets', '插入位置', ['全部 7 个模块', '只在注意力层', '只在 MLP']], ['lr', '学习率'], ['min_lr', '最低学习率'], ['warmup', '预热步数'],
+  ['max_steps', '训练步数'], ['batch_size', 'batch'], ['grad_accum', '梯度累积'], ['eval_every', '每 N 步评估'], ['seed', '随机种子']];
+const TARGETS = { '全部 7 个模块': ['q_proj', 'k_proj', 'v_proj', 'o_proj', 'gate_proj', 'up_proj', 'down_proj'], '只在注意力层': ['q_proj', 'k_proj', 'v_proj', 'o_proj'], '只在 MLP': ['gate_proj', 'up_proj', 'down_proj'] };
+let NEW_MODE = 'scratch';
+function openNew(mode = NEW_MODE) {
+  NEW_MODE = mode;
+  const m = S.meta, ft = mode === 'finetune';
+  $('modeSel').innerHTML = `<button class="${ft ? '' : 'primary'}" onclick="openNew('scratch')">从零训练小模型</button><button class="${ft ? 'primary' : ''}" onclick="openNew('finetune')">微调开源基座（${esc(m.ft_defaults.base)}）</button>`;
+  $('modeHint').innerHTML = ft ? (m.ft_ready ? `冻结基座的 ${fmt(5.96e8, 2)} 参数，只训练插入的 LoRA 小矩阵。数据：${esc(m.ft_defaults.dataset_repo)}（${esc(m.ft_defaults.dataset_license)}）。同一时间只能跑一个微调。` : '<span style="color:var(--bad)">基座模型还没下载</span>') : '从随机初始化开始训练一个小 GPT。';
+  const presets = ft ? m.ft_presets : m.presets;
+  $('presetSel').innerHTML = '<option value="">（默认）</option>' + Object.keys(presets).map(k => `<option>${k}</option>`).join('');
+  const F = ft ? FT_FIELDS : FIELDS;
+  $('form').innerHTML = F.map(([k, l, opts]) => `<label>${l}${opts ? `<select id="f_${k}">${opts.map(o => `<option>${o}</option>`).join('')}</select>` : `<input id="f_${k}">`}</label>`).join('');
+  $('presetSel').value = ft ? 'sft-alpaca' : 'pycode-tiny'; fillPreset();
+  $('newErr').textContent = ''; $('newModal').style.display = 'flex';
+}
+function closeNew() { $('newModal').style.display = 'none'; }
+function fillPreset() {
+  const ft = NEW_MODE === 'finetune', m = S.meta;
+  const c = ft ? { ...m.ft_defaults, ...(m.ft_presets[$('presetSel').value] || {}) } : { ...m.defaults, p: 97, train_frac: 0.3, ...(m.presets[$('presetSel').value] || {}) };
+  (ft ? FT_FIELDS : FIELDS).forEach(([k]) => $('f_' + k).value = k === 'targets' ? (Object.entries(TARGETS).find(([, v]) => JSON.stringify(v) === JSON.stringify(c.targets)) || ['全部 7 个模块'])[0] : c[k] ?? '');
+  $('f_hypothesis').value = c.hypothesis || '';
+}
+async function submitNew() {
+  const ft = NEW_MODE === 'finetune';
+  const cfg = { name: $('f_name').value.trim() || undefined, hypothesis: $('f_hypothesis').value };
+  (ft ? FT_FIELDS : FIELDS).forEach(([k]) => { const v = $('f_' + k).value; cfg[k] = v === '' ? undefined : isNaN(+v) ? v : +v; });
+  if (ft) { cfg.kind = 'finetune'; cfg.targets = TARGETS[cfg.targets]; }
+  else if (cfg.dataset === 'modadd') { cfg.block_size = 4; cfg.log_every = 20; } else { delete cfg.p; delete cfg.train_frac; }
+  try { const r = await api('/api/train', cfg); closeNew(); S.focus = r.name; S.compare = new Set([r.name]); S.tab = 'overview'; await refreshRuns(); render(); }
+  catch (e) { $('newErr').textContent = e.message; }
+}
+
+// ------------------------------------------------------------------ 启动 & 实时刷新
+(async () => {
+  S.meta = await api('/api/meta');
+  $('device').textContent = `计算设备：${S.meta.device}`;
+  await refreshRuns(); render();
+  setInterval(async () => {
+    const live = S.runs.some(r => ['running', 'preparing'].includes(r.status?.state));
+    if (!live) return;
+    await refreshRuns();
+    if (S.focus && ['overview', 'train', 'impact', 'where'].includes(S.tab) && !document.activeElement?.matches('textarea,input,select')) { await loadRun(S.focus, true); for (const n of S.compare) await loadRun(n, true); render(); }
+  }, 3000);
+})();
+window.onresize = () => { clearTimeout(window._rz); window._rz = setTimeout(render, 200); };
+</script>
+</body>
+</html>
