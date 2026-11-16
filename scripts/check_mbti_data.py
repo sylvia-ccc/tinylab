@@ -53,13 +53,13 @@ def main():
     fmt_bad = []
     for r in rows:
         m = r.get("messages") or []
-        ok = (r.get("type") in TYPES and r.get("q_id") and r.get("scene") and r.get("generator") and m
+        ok = (r.get("type") in TYPES and r.get("q_id") and r.get("scene") and m
               and m[-1].get("role") == "assistant" and m[0].get("role") == "user"
               and all(x.get("role") == ("user" if k % 2 == 0 else "assistant") for k, x in enumerate(m))
               and all(isinstance(x.get("content"), str) and x["content"].strip() for x in m))
         if not ok:
             fmt_bad.append(json.dumps(r, ensure_ascii=False)[:160])
-    add("字段与轮次格式", not fmt_bad, f"{len(fmt_bad)} 条格式不对（缺 type/q_id/scene/generator，或角色不交替，或最后一条不是 assistant）", fmt_bad)
+    add("字段与轮次格式", not fmt_bad, f"{len(fmt_bad)} 条格式不对（缺 type/q_id/scene，或角色不交替，或最后一条不是 assistant）", fmt_bad)
     rows = [r for r in rows if json.dumps(r, ensure_ascii=False)[:160] not in set(fmt_bad)]
     if not rows:
         return finish(res, a)
@@ -151,9 +151,11 @@ def main():
     pii = [f"{name}：{t[:40]}" for _, t in answers for p, name in PII if re.search(p, t)]
     pii += [f"{name}（用户消息）：{x['content'][:40]}" for r in rows for x in r["messages"] if x["role"] == "user" for p, name in PII if re.search(p, x["content"])]
     add("隐私信息（手机号、邮箱、证件号）", not pii, f"{len(pii)} 处", pii)
-    gens = collections.Counter(r["generator"] for r in rows)
+    gens = collections.Counter(r.get("generator") or "（未填写）" for r in rows)
     ok_gen = ("deepseek", "qwen", "glm")  # 条款允许蒸馏 / 开源权重本地自跑（2026-11-16 调研）
     badg = [f"{g}：{c} 条" for g, c in gens.items() if not any(k in g.lower() for k in ok_gen)]
+    if "（未填写）" in gens:
+        badg.insert(0, f"{gens['（未填写）']} 条没有填 generator 字段：无法确认能否用于开源模型")
     add("生成模型是否允许用于训练开源模型", not badg, "；".join(f"{g}：{c} 条" for g, c in gens.most_common())
         + ("。不在白名单（DeepSeek / 本地 Qwen / 本地 GLM）：" + "、".join(badg) if badg else ""), badg)
     return finish(res, a)

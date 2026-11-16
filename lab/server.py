@@ -23,6 +23,70 @@ WEB = ROOT / "web"
 NAME_RE = re.compile(r"^[A-Za-z0-9][\w.-]*$")
 _models = {}  # run -> (mtime, model, dataset)
 
+# ---- 人工盲评（review.html）：只读 items.json，绝不读取或返回 key.json ----
+REVIEW = ROOT / "review"
+REVIEW_DIMS = ("persona", "relevance", "natural")  # 像不像这种人格 / 切不切题 / 自然不自然
+
+
+def review_dir(name):
+    if not isinstance(name, str) or not NAME_RE.match(name):
+        raise FileNotFoundError("任务名不合法")
+    for base in (REVIEW, REVIEW / "_demo"):  # _demo 下放演示任务
+        if (base / name / "items.json").is_file():
+            return base / name
+    raise FileNotFoundError(f"没有这个盲评任务：{name}")
+
+
+def review_tasks():
+    out = []
+    for base in (REVIEW, REVIEW / "_demo"):
+        if base.is_dir():
+            for d in sorted(base.iterdir()):
+                if NAME_RE.match(d.name) and (d / "items.json").is_file():
+                    try:
+                        it = json.loads((d / "items.json").read_text(encoding="utf-8"))
+                        out.append({"task": d.name, "title": it.get("title", d.name), "n": len(it["items"]),
+                                    "answers": len(list(d.glob("answers_*.json")))})
+                    except (ValueError, KeyError):
+                        pass
+    return out
+
+
+def save_review(name, body):
+    """校验并保存一份答卷；只接受 items.json 里存在的题、1-5 的分数、合法的"最好"编号。"""
+    d = review_dir(name)
+    items = json.loads((d / "items.json").read_text(encoding="utf-8"))["items"]
+    raw = body.get("ratings")
+    if not isinstance(raw, dict):
+        raise ValueError("ratings 必须是对象")
+    ratings = {}
+    for it in items:
+        r = raw.get(it["id"])
+        if not isinstance(r, dict):
+            continue
+        n = len(it["answers"])
+        sc = {}
+        for k, v in (r.get("scores") or {}).items():
+            if not (isinstance(k, str) and k.isdigit() and 1 <= int(k) <= n and isinstance(v, dict)):
+                continue
+            one = {dim: v[dim] for dim in REVIEW_DIMS if type(v.get(dim)) is int and 1 <= v[dim] <= 5}
+            if one:
+                sc[k] = one
+        best = r.get("best")
+        best = best if type(best) is int and 1 <= best <= n else None
+        if sc or best:
+            ratings[it["id"]] = {"scores": sc, "best": best}
+    now = time.strftime("%Y%m%d-%H%M%S")
+    f = d / f"answers_{now}.json"
+    i = 2
+    while f.exists():
+        f = d / f"answers_{now}-{i}.json"
+        i += 1
+    f.write_text(json.dumps({"task": name, "reviewer": str(body.get("reviewer", ""))[:40].strip(),
+                             "submitted_at": time.strftime("%Y-%m-%d %H:%M:%S"), "n_items": len(items),
+                             "ratings": ratings}, ensure_ascii=False, indent=1), encoding="utf-8")
+    return {"ok": True, "file": f.name, "rated": len(ratings), "n_items": len(items)}
+
 
 def read_jsonl(p):
     if not p.exists():
@@ -132,6 +196,13 @@ class H(BaseHTTPRequestHandler):
                 RUNS.mkdir(exist_ok=True)
                 ds = sorted((d for d in RUNS.iterdir() if d.is_dir() and (d / "status.json").exists()), key=lambda d: d.stat().st_mtime, reverse=True)
                 return self.send([run_summary(d) for d in ds])
+            if p in ("/review", "/review.html"):
+                return self.send((WEB / "review.html").read_bytes(), ctype="text/html; charset=utf-8")
+            if p == "/api/review":
+                return self.send(review_tasks())
+            m = re.match(r"^/api/review/([^/]+)$", p)
+            if m:
+                return self.send((review_dir(m.group(1)) / "items.json").read_bytes())  # 只给 items.json
             m = re.match(r"^/api/run/([^/]+)(?:/(\w+))?(?:/(\d+))?$", p)
             if m:
                 name, what, step = m.groups()
@@ -200,6 +271,14 @@ class H(BaseHTTPRequestHandler):
                 c["notes"] = str(body.get("notes", ""))[:20000]
                 (d / "config.json").write_text(json.dumps(c, ensure_ascii=False, indent=1))
                 return self.send({"ok": True})
+            m = re.match(r"^/api/review/([^/]+)/answers$", p)
+            if m:
+                if n > 2_000_000:
+                    return self.err("答卷太大", 413)
+                try:
+                    return self.send(save_review(m.group(1), body))
+                except ValueError as e:
+                    return self.err(str(e))
             if p == "/api/chat":
                 from .finetune import chat
                 name = str(body.get("run", ""))

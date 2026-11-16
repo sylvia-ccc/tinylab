@@ -6,3 +6,8 @@ __pycache__/
 local_paths.json
 *.pt
 *.safetensors
+# 出题脚本里包含训练题目，数据暂不公开
+scripts/make_mbti_skeleton*.py
+# 真实盲评任务（含答案对照表）不公开，只保留演示
+review/*
+!review/_demo/

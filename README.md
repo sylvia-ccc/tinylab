@@ -69,7 +69,9 @@ lab/finetune.py  真实基座的 LoRA 微调：数据血缘、手写 LoRA、特�
 lab/mbti.py      人格数据流水线（按核心问题整组留出）与不依赖判官的评估
 lab/server.py    看板后端（只用标准库）
 web/index.html   看板前端（单文件，无外部依赖）
+web/review.html + scripts/make_blind_review.py / score_blind_review.py   人工盲评：出题（打乱顺序、隐去模型名）、评分页面、汇总（数据放 review/，key.json 不给评审）
 scripts/         下载、7B 单变量实验（mlx）、7B 评估
+scripts/answer_set.py + eval_redteam.py   最终考试：多个答题者（微调 / 已合并模型 / 基座+人设卡）答测试题和红队题，红队规则初筛出报告，答案可直接喂盲评
 docs/experiments/ 实验报告
 ```
 

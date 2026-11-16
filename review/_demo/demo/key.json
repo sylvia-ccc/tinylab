@@ -1,0 +1,82 @@
+{
+ "task": "demo",
+ "seed": 20261116,
+ "models": [
+  "demo-弱",
+  "demo-强"
+ ],
+ "items": {
+  "q01": {
+   "order": [
+    "demo-弱",
+    "demo-强"
+   ]
+  },
+  "q02": {
+   "order": [
+    "demo-弱",
+    "demo-强"
+   ]
+  },
+  "q03": {
+   "order": [
+    "demo-弱",
+    "demo-强"
+   ]
+  },
+  "q04": {
+   "order": [
+    "demo-弱",
+    "demo-强"
+   ]
+  },
+  "q05": {
+   "order": [
+    "demo-强",
+    "demo-弱"
+   ]
+  },
+  "q06": {
+   "order": [
+    "demo-强",
+    "demo-弱"
+   ]
+  },
+  "q07": {
+   "order": [
+    "demo-弱",
+    "demo-强"
+   ]
+  },
+  "q08": {
+   "order": [
+    "demo-强",
+    "demo-弱"
+   ]
+  },
+  "q09": {
+   "order": [
+    "demo-强",
+    "demo-弱"
+   ]
+  },
+  "q10": {
+   "order": [
+    "demo-强",
+    "demo-弱"
+   ]
+  },
+  "q11": {
+   "order": [
+    "demo-强",
+    "demo-弱"
+   ]
+  },
+  "q12": {
+   "order": [
+    "demo-强",
+    "demo-弱"
+   ]
+  }
+ }
+}

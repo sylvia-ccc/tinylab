@@ -68,6 +68,8 @@ def _sha(p):
 
 
 def build_data(c, tok, hub, root):
+    if c["dataset"] == "mbti-new":
+        return build_data_chat(c, tok, hub, root)
     lin = {"stages": [], "mbti": {}}
     src_dir = hub / c["dataset_file"]
     rows, srcs = [], []
@@ -199,10 +201,104 @@ def render_prompt(instruction):
     return f"<|im_start|>user\n{instruction.strip()}<|im_end|>\n<|im_start|>assistant\n"
 
 
+def sys_text(T):
+    """新数据（mbti-new）的 system 提示：只给人格类型，不放人设卡（7B 单变量实验 V3：设定放 system，训练和推理同一格式）。"""
+    return f"你的人格类型是 {T}。用这种人格的方式，像朋友一样和对方聊天。"
+
+
+def render_chat(system, msgs):
+    s = f"<|im_start|>system\n{system}<|im_end|>\n" if system else ""
+    for m in msgs:
+        s += f"<|im_start|>{m['role']}\n{m['content'].strip()}<|im_end|>\n"
+    return s + "<|im_start|>assistant\n"
+
+
+def full_prompt(r, T, cards):
+    """这条数据换成人格 T 后、模型实际看到的完整提示。"""
+    if r.get("fmt") == "chat":
+        return render_chat(sys_text(T), r["_ctx"])
+    return render_prompt(make_prompt(r, T, cards))
+
+
+def card_prompt(r, T, cards):
+    """对照臂：基座 + 人设卡（不训练）。新格式把卡放 system；旧格式沿用当时的写法。"""
+    if r.get("fmt") == "chat":
+        return render_chat(cards[T], r["_ctx"])
+    return render_prompt(cards[T] + (SEP if r.get("fmt") == "card" else "\n\n") + r["body"])
+
+
+def build_data_chat(c, tok, hub, root):
+    """新数据格式（docs/mbti-data-spec.md）：messages + type + q_id。按 q_id 整组留出；多轮对话按 assistant 轮次拆开。"""
+    lin = {"stages": [], "mbti": {}}
+    files = sorted((root / c["dataset_file"]).glob("*.jsonl"))
+    raw, srcs = [], []
+    for p in files:
+        rs = [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
+        srcs.append({"file": str(p.relative_to(root)), "rows": len(rs), "sha256": _sha(p), "bytes": p.stat().st_size})
+        raw += rs
+    gens = sorted({r.get("generator", "未填写") for r in raw})
+    lin["source"] = {"repo": "新生成的 MBTI 数据集（按 docs/mbti-data-spec.md）", "url": "",
+                     "file": " + ".join(s["file"] for s in srcs), "bytes": sum(s["bytes"] for s in srcs),
+                     "sha256": "; ".join(f"{s['file'].split('/')[-1]}={s['sha256'][:16]}…" for s in srcs),
+                     "license": c["dataset_license"], "rows": len(raw), "columns": list(raw[0].keys()),
+                     "origin": "生成模型：" + "、".join(gens) + "；先出核心问题再按人格写回答，经 scripts/check_mbti_data.py 验收",
+                     "raw_examples": [{"instruction": r["messages"][0]["content"], "input": "", "output": r["messages"][1]["content"]} for r in raw[:3]],
+                     "files": srcs}
+    stage = lambda name, why, kept, dropped=None: lin["stages"].append({"name": name, "why": why, "kept": kept, "dropped_examples": (dropped or [])[:3]})
+    stage("原始数据", f"{len(files)} 个文件", len(raw))
+    rows = []
+    for r in raw:
+        m = r["messages"]
+        for k in range(1, len(m), 2):
+            rows.append({"type": r["type"], "group": r["q_id"], "scene": r.get("scene"), "fmt": "chat",
+                         "multi": len(m) > 2, "_ctx": m[:k], "body": m[0]["content"] if len(m) == 2 else m[k - 1]["content"],
+                         "instruction": m[k - 1]["content"], "input": "", "output": m[k]["content"]})
+    stage("多轮按回答拆开", "每段多轮对话里的每一条 assistant 回答都单独成为一条训练样本（前面的对话作为上下文）", len(rows))
+    groups = sorted({r["group"] for r in rows})
+    rng = random.Random(c["seed"]); rng.shuffle(groups)
+    n_unseen = max(1, round(len(groups) * c["unseen_group_frac"]))
+    unseen_g = set(groups[:n_unseen])
+    def enc(r):
+        p, a = tok.encode(render_chat(sys_text(r["type"]), r["_ctx"])), tok.encode(r["output"].strip() + "<|im_end|>")
+        return {**r, "_p": p, "_a": a} if len(p) + len(a) <= c["max_len"] else None
+    seen = [x for x in (enc(r) for r in rows if r["group"] not in unseen_g) if x]
+    unseen = [x for x in (enc(r) for r in rows if r["group"] in unseen_g) if x]
+    rng.shuffle(seen); rng.shuffle(unseen)
+    n_vs = round(len(seen) * c["seen_val_frac"])
+    va_seen, tr = seen[:n_vs], seen[n_vs:]
+    stage("按核心问题（q_id）整组留出", f"{len(groups)} 个核心问题，留出 {n_unseen} 个（{round(100 * c['unseen_group_frac'])}%）训练中从不出现", len(seen))
+    tr_g = {r["group"] for r in tr}
+    stage("切分：训练 / 验证（见过的问题）/ 验证（没见过的问题）",
+          f"训练 {len(tr)} 条；见过的问题验证 {len(va_seen)} 条；没见过的问题 {len(unseen)} 条，与训练重叠 0 个 q_id", len(tr))
+    grams = set()
+    for r in tr:
+        grams.update(r["output"][i:i + 8] for i in range(len(r["output"]) - 7))
+    tc = {T: 0 for T in TYPES}
+    for r in tr:
+        tc[r["type"]] += 1
+    lin["mbti"] = {"n_groups": len(groups), "n_unseen_groups": n_unseen, "group_sizes": [], "type_counts": tc,
+                   "train_groups": len(tr_g), "top_groups": [], "mean_rows_per_group": round(len(tr) / max(1, len(tr_g)), 1),
+                   "seen_val_overlap": sum(r["group"] in tr_g for r in va_seen), "seen_val_n": len(va_seen),
+                   "unseen_n": len(unseen), "unseen_groups_examples": sorted(unseen_g)[:8], "generators": gens}
+    def tokview(ex):
+        return {"prompt": [tok.decode([i]) for i in ex["_p"]], "answer": [tok.decode([i]) for i in ex["_a"]],
+                "raw": {"instruction": ex["instruction"], "input": "", "output": ex["output"]}}
+    pl = np.array([len(e["_p"]) for e in tr]); al = np.array([len(e["_a"]) for e in tr])
+    lin["format"] = {"template": "<|im_start|>system\\n你的人格类型是 {人格}。……<|im_end|>\\n<|im_start|>user\\n{用户}<|im_end|>\\n（多轮时前面的对话）<|im_start|>assistant\\n{回答}<|im_end|>",
+                     "examples": [tokview(e) for e in tr[:3]],
+                     "prompt_len_hist": np.histogram(pl, bins=20, range=(0, c["max_len"]))[0].tolist(),
+                     "answer_len_hist": np.histogram(al, bins=20, range=(0, c["max_len"]))[0].tolist(),
+                     "hist_range": [0, c["max_len"]], "trained_token_frac": round(float(al.sum() / (al.sum() + pl.sum())), 4),
+                     "train_tokens": int(pl.sum() + al.sum()), "answer_tokens": int(al.sum()),
+                     "epochs": round(c["max_steps"] * c["batch_size"] * c["grad_accum"] / len(tr), 2)}
+    cards = {T: (hub / "mbti-v6" / "cards" / f"{T}.txt").read_text(encoding="utf-8").strip() for T in TYPES}
+    return lin, tr, va_seen, unseen, grams, cards
+
+
 def pick_disc_set(unseen, n_per_type, seed):
     """型可分度用的固定子集：每型取 n 条单轮回答（多轮的上下文本身就带人格口吻，会泄露答案）。"""
     rng = random.Random(seed + 7)
-    by = {T: [r for r in unseen if r["type"] == T and "\n" not in r["body"]] for T in TYPES}
+    by = {T: [r for r in unseen if r["type"] == T and not r.get("multi") and "\n" not in r["body"]] for T in TYPES}
     out = []
     for T in TYPES:
         rs = by[T][:]
@@ -214,7 +310,7 @@ def pick_disc_set(unseen, n_per_type, seed):
 def pick_gen_set(unseen, n, seed):
     """生成用：n 个不同的没见过的问题，人格轮流取，单轮。"""
     rng = random.Random(seed + 11)
-    singles = [r for r in unseen if "\n" not in r["body"]]
+    singles = [r for r in unseen if not r.get("multi") and "\n" not in r["body"]]
     rng.shuffle(singles)
     out, used = [], set()
     for r in singles:
@@ -261,7 +357,7 @@ def type_discrimination(model, tok, device, rows, prompt_fn):
     prompts, answers = [], []
     for r in rows:
         for T in TYPES:
-            prompts.append(render_prompt(prompt_fn(T, r)))
+            prompts.append(prompt_fn(T, r))
             answers.append(r["output"].strip())
     lp = np.array(answer_logprob(model, tok, device, prompts, answers)).reshape(len(rows), 16)
     pred = [TYPES[int(i)] for i in lp.argmax(1)]

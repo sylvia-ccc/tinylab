@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TinyLab · 人工盲评</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2; --surface-1: #fcfcfb; --surface-2: #efefec; --border: #dcdbd6;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #8a8984;
+  --accent: #2a78d6; --accent-soft: #e3effc; --good: #0a7d32; --warn: #b26b00; --bad: #c4302b;
+  --s1: #2a78d6; --s3: #1baf7a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #111110; --surface-1: #1a1a19; --surface-2: #232321; --border: #34342f;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --accent: #3987e5; --accent-soft: #14283f; --good: #3fb950; --warn: #d29922; --bad: #f0605a;
+    --s1: #3987e5; --s3: #199e70;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.6 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; background: var(--bg); color: var(--text-primary); }
+header { position: sticky; top: 0; z-index: 5; background: var(--surface-1); border-bottom: 1px solid var(--border); padding: 10px 16px 8px; }
+.top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.top h1 { font-size: 16px; margin: 0; font-weight: 650; }
+.top .grow { flex: 1; }
+.bar { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+.bar > i { display: block; height: 100%; background: var(--s3); width: 0; transition: width .2s; }
+.barinfo { font-size: 12px; color: var(--text-secondary); margin-top: 3px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+main { max-width: 860px; margin: 0 auto; padding: 14px 14px 90px; }
+button { font: inherit; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); border-radius: 8px; padding: 6px 14px; cursor: pointer; min-height: 36px; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .4; cursor: default; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+input, select { font: inherit; color: var(--text-primary); background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 5px 9px; min-height: 36px; max-width: 100%; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+.persona { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.badge { font-size: 22px; font-weight: 750; letter-spacing: 1px; color: var(--accent); }
+.persona .desc { color: var(--text-secondary); }
+.label { font-size: 12px; color: var(--text-muted); margin: 10px 0 2px; }
+.question { white-space: pre-wrap; background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
+.ans { border-left: 4px solid var(--border); }
+.ans.best { border-color: var(--s3); box-shadow: 0 0 0 1px var(--s3) inset; }
+.ans h3 { margin: 0 0 6px; font-size: 14px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
+.ans .tag { font-size: 12px; font-weight: 600; color: var(--good); border: 1px solid var(--good); border-radius: 10px; padding: 0 8px; }
+.ans .text { white-space: pre-wrap; word-break: break-word; margin: 0 0 10px; }
+.row { display: grid; grid-template-columns: 9.5em 1fr; gap: 6px 10px; align-items: center; padding: 5px 6px; border-radius: 8px; border: 1px solid transparent; }
+.row.cur { border-color: var(--accent); background: var(--accent-soft); }
+.row .name { font-size: 13px; color: var(--text-secondary); }
+.scale { display: flex; gap: 6px; }
+.scale button { flex: 1; min-width: 0; padding: 4px 0; }
+.scale button.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.scale-end { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); padding: 0 2px; }
+.bestrow .scale button.on { background: var(--s3); border-color: var(--s3); }
+.nav { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface-1); border-top: 1px solid var(--border); padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); z-index: 5; }
+.nav > div { max-width: 860px; margin: 0 auto; display: flex; gap: 8px; align-items: center; }
+.nav .mid { flex: 1; text-align: center; color: var(--text-secondary); font-size: 13px; }
+.hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--surface-2); }
+.msg { padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; border: 1px solid var(--border); background: var(--surface-2); }
+.msg.ok { border-color: var(--good); color: var(--good); }
+.msg.err { border-color: var(--bad); color: var(--bad); }
+.tasks a { display: block; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; color: inherit; text-decoration: none; background: var(--surface-1); }
+.tasks a:hover { border-color: var(--accent); }
+.tasks small { color: var(--text-secondary); }
+@media (max-width: 560px) {
+  .row { grid-template-columns: 1fr; gap: 2px; }
+  .scale button { min-height: 42px; }
+  .hint.kb { display: none; }
+  .badge { font-size: 20px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1 id="title">人工盲评</h1>
+    <span class="grow"></span>
+    <label style="font-size:13px;color:var(--text-secondary)">评审人 <input id="reviewer" size="8" maxlength="40" placeholder="姓名（选填）"></label>
+    <select id="jump" aria-label="跳转到某一题"></select>
+  </div>
+  <div class="bar"><i id="bar"></i></div>
+  <div class="barinfo"><span id="barL"></span><span id="barR"></span></div>
+</header>
+<main id="main"></main>
+<div class="nav" id="nav" hidden><div>
+  <button id="prev">← 上一题</button>
+  <span class="mid" id="mid"></span>
+  <button id="next" class="primary">下一题 →</button>
+  <button id="submit" hidden class="primary">提交</button>
+</div></div>
+
+<script>
+// 16 型人格的一句话通俗解释（评审判断"像不像"的参照）
+const MBTI = {
+  INTJ: "冷静、有主见、爱分析长远", INTP: "好奇、爱琢磨、喜欢拆解道理",
+  ENTJ: "果断、有魄力、爱带队定目标", ENTP: "机灵、点子多、爱抬杠辩论",
+  INFJ: "温和、有洞察、在意人的深层感受", INFP: "敏感、理想化、看重内心价值",
+  ENFJ: "热心、会鼓励人、擅长带动气氛", ENFP: "热情、脑洞大、爱聊各种可能",
+  ISTJ: "踏实、守规矩、讲究靠谱和细节", ISFJ: "体贴、耐心、默默照顾身边人",
+  ESTJ: "干练、讲秩序、直接爱拿主意", ESFJ: "热络、顾人情、在意大家的感受",
+  ISTP: "冷静、动手强、话少务实", ISFP: "随和、重感受、安静有审美",
+  ESTP: "爽快、敢行动、活在当下", ESFP: "外向、爱热闹、有感染力"
+};
+const DIMS = [["persona", "像不像这种人格"], ["relevance", "切不切题"], ["natural", "自然不自然"]];
+const ENDS = ["很不像", "很像"];
+const $ = id => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+let task = null, data = null, idx = 0, cur = 0;           // cur: 键盘光标所在行
+let state = { reviewer: "", ratings: {}, pos: 0 };        // ratings[id] = {scores:{"1":{persona,relevance,natural}}, best}
+const LS = () => "tinylab_review_" + task;
+const save = () => { state.pos = idx; state.reviewer = $("reviewer").value; try { localStorage.setItem(LS(), JSON.stringify(state)); } catch (e) {} };
+
+function rec(id) { return state.ratings[id] || (state.ratings[id] = { scores: {}, best: null }); }
+function isDone(it) {
+  const r = state.ratings[it.id];
+  if (!r || !r.best) return false;
+  return it.answers.every((_, i) => { const s = r.scores[i + 1]; return s && DIMS.every(([k]) => s[k]); });
+}
+function doneCount() { return data.items.filter(isDone).length; }
+
+// ---------- 首页：选任务 ----------
+async function home() {
+  $("title").textContent = "人工盲评";
+  $("nav").hidden = true; $("jump").hidden = true; $("reviewer").parentElement.hidden = true;
+  const m = $("main"); m.textContent = "";
+  let list = [];
+  try { list = await (await fetch("/api/review")).json(); } catch (e) { m.append(el("div", "msg err", "读不到任务列表：" + e.message)); return; }
+  const box = el("div", "tasks");
+  if (!list.length) m.append(el("div", "msg", "还没有盲评任务。先运行 scripts/make_blind_review.py 生成。"));
+  list.forEach(t => {
+    const a = el("a"); a.href = "?task=" + encodeURIComponent(t.task);
+    a.append(el("b", null, t.title), el("br"), el("small", null, `${t.n} 题 · 已收到 ${t.answers} 份答卷`));
+    box.append(a);
+  });
+  m.append(box);
+}
+
+// ---------- 答题页 ----------
+function rows(it) { return it.answers.length * DIMS.length + 1; }   // 每个回答 3 项 + 最后一行"整体最好"
+function render() {
+  const it = data.items[idx], r = rec(it.id), n = it.answers.length;
+  const m = $("main"); m.textContent = "";
+  if (cur >= rows(it)) cur = rows(it) - 1;
+
+  const c1 = el("div", "card"), p = el("div", "persona");
+  p.append(el("span", "badge", it.type), el("span", "desc", MBTI[it.type] || "（无说明）"));
+  c1.append(p, el("div", "label", "用户说"), el("div", "question", it.question));
+  c1.append(el("div", "hint", `请想象一个 ${it.type} 的朋友会怎么回答，再给下面每个回答打分。`));
+  m.append(c1);
+
+  it.answers.forEach((txt, a) => {
+    const no = a + 1, sc = r.scores[no] || {};
+    const card = el("div", "card ans" + (r.best === no ? " best" : ""));
+    const h = el("h3", null, "回答 " + no);
+    if (r.best === no) h.append(el("span", "tag", "整体最好"));
+    card.append(h, el("p", "text", txt));
+    DIMS.forEach(([k, name], d) => {
+      const ri = a * DIMS.length + d, row = el("div", "row" + (cur === ri ? " cur" : ""));
+      row.append(el("span", "name", `${name}（1-5）`));
+      const sc5 = el("div", "scale");
+      for (let v = 1; v <= 5; v++) {
+        const b = el("button", sc[k] === v ? "on" : "", v);
+        b.onclick = () => { setScore(no, k, v); cur = ri; render(); };
+        sc5.append(b);
+      }
+      row.append(sc5);
+      row.onclick = () => { if (cur !== ri) { cur = ri; render(); } };
+      card.append(row);
+      if (d === 0) { const e = el("div", "scale-end"); e.append(el("span", null, ENDS[0]), el("span", null, ENDS[1])); /* 仅第一项给出端点提示 */ row.after(e); e.style.gridColumn = "1/-1"; }
+    });
+    m.append(card);
+  });
+
+  const bc = el("div", "card bestrow"), bi = n * DIMS.length, brow = el("div", "row" + (cur === bi ? " cur" : ""));
+  brow.append(el("span", "name", "整体最好的是"));
+  const bs = el("div", "scale");
+  it.answers.forEach((_, a) => {
+    const b = el("button", r.best === a + 1 ? "on" : "", "回答 " + (a + 1));
+    b.onclick = () => { r.best = a + 1; cur = bi; save(); render(); };
+    bs.append(b);
+  });
+  brow.append(bs); brow.onclick = () => { if (cur !== bi) { cur = bi; render(); } };
+  bc.append(brow);
+  bc.append(el("div", "hint kb", "键盘：↑↓ 换行　1-5 打分（自动跳到下一行）　最后一行按 1-" + n + " 选最好　←→ 或 Enter 换题"));
+  m.append(bc);
+
+  // 进度
+  const done = doneCount(), N = data.items.length;
+  $("bar").style.width = (done / N * 100) + "%";
+  $("barL").textContent = `已完成 ${done} / ${N} 题`;
+  $("barR").textContent = isDone(it) ? "本题已完成" : "本题未完成";
+  $("mid").textContent = `${idx + 1} / ${N}`;
+  $("prev").disabled = idx === 0;
+  const last = idx === N - 1;
+  $("next").hidden = last; $("submit").hidden = !last;
+  $("jump").value = idx;
+  [...$("jump").options].forEach((o, i) => { o.textContent = `第 ${i + 1} 题${isDone(data.items[i]) ? " ✓" : ""}`; });
+  save();
+}
+
+function setScore(no, k, v) {
+  const r = rec(data.items[idx].id);
+  (r.scores[no] || (r.scores[no] = {}))[k] = v;
+  save();
+}
+function go(i) { idx = Math.max(0, Math.min(data.items.length - 1, i)); cur = 0; render(); window.scrollTo(0, 0); }
+
+async function submit() {
+  const N = data.items.length, done = doneCount();
+  if (done < N && !confirm(`还有 ${N - done} 题没有完整打分，仍要提交吗？（未完成的题会按已填部分保存）`)) return;
+  const old = document.querySelector(".msg"); if (old) old.remove();
+  const box = el("div", "msg", "提交中…"); $("main").prepend(box); window.scrollTo(0, 0);
+  try {
+    const res = await fetch("/api/review/" + encodeURIComponent(task) + "/answers", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reviewer: $("reviewer").value, ratings: state.ratings })
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || res.status);
+    box.className = "msg ok"; box.textContent = `已提交：${j.file}（${j.rated}/${j.n_items} 题有评分）。本地进度仍保留，可继续修改后再次提交。`;
+  } catch (e) {
+    box.className = "msg err"; box.textContent = "提交失败：" + e.message + "。评分仍保存在本机浏览器里；也可点下面的按钮保存成文件。";
+    const b = el("button", null, "导出答卷文件"); b.style.marginLeft = "10px"; b.onclick = exportFile; box.append(b);
+  }
+}
+function exportFile() {
+  const blob = new Blob([JSON.stringify({ task, reviewer: $("reviewer").value, ratings: state.ratings }, null, 1)], { type: "application/json" });
+  const a = el("a"); a.href = URL.createObjectURL(blob); a.download = `answers_${task}.json`; a.click();
+}
+
+// ---------- 键盘 ----------
+document.addEventListener("keydown", e => {
+  if (!data || e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target.tagName; if (t === "INPUT" || t === "SELECT" || t === "TEXTAREA") return;
+  const it = data.items[idx], n = it.answers.length, R = rows(it);
+  if (e.key === "ArrowLeft") { go(idx - 1); }
+  else if (e.key === "ArrowRight" || e.key === "Enter") { if (e.target.tagName === "BUTTON" && e.key === "Enter") return; go(idx + 1); }
+  else if (e.key === "ArrowDown") { cur = Math.min(R - 1, cur + 1); render(); }
+  else if (e.key === "ArrowUp") { cur = Math.max(0, cur - 1); render(); }
+  else if (/^[1-9]$/.test(e.key)) {
+    const v = +e.key;
+    if (cur === R - 1) { if (v <= n) { rec(it.id).best = v; save(); render(); } }
+    else if (v <= 5) {
+      const a = Math.floor(cur / DIMS.length), d = cur % DIMS.length;
+      setScore(a + 1, DIMS[d][0], v); cur = Math.min(R - 1, cur + 1); render();
+    }
+  } else return;
+  e.preventDefault();
+});
+
+async function main() {
+  task = new URLSearchParams(location.search).get("task");
+  if (!task) return home();
+  try {
+    const res = await fetch("/api/review/" + encodeURIComponent(task));
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.status);
+  } catch (e) { data = null; $("main").append(el("div", "msg err", "打不开任务 " + task + "：" + e.message), (() => { const a = el("a", null, "返回任务列表"); a.href = "?"; return a; })()); return; }
+  try { Object.assign(state, JSON.parse(localStorage.getItem(LS()) || "{}")); } catch (e) {}
+  if (!state.ratings) state.ratings = {};
+  $("title").textContent = data.title || task;
+  document.title = "盲评 · " + (data.title || task);
+  $("reviewer").value = state.reviewer || "";
+  $("reviewer").addEventListener("input", save);
+  const j = $("jump"); data.items.forEach((_, i) => j.append(new Option("", i)));
+  j.onchange = () => go(+j.value);
+  $("prev").onclick = () => go(idx - 1); $("next").onclick = () => go(idx + 1); $("submit").onclick = submit;
+  $("nav").hidden = false;
+  idx = Math.min(Math.max(+state.pos || 0, 0), data.items.length - 1);
+  render();
+}
+main();
+</script>
+</body>
+</html>

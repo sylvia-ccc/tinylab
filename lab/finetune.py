@@ -80,6 +80,15 @@ FT_PRESETS = {
                         max_steps=330, eval_every=110,
                         hypothesis="对照实验：7B 上的 v8 adapter 训 1 轮就崩了（复读、背人设卡里的指令词）。用同一份 v8 数据、TinyLab 的配方在 0.6B 上训 1 轮："
                                    "如果也崩 → 问题出在数据（教师口头禅、人设卡格式）；如果不崩 → 问题出在 7B 那边的训练配方。"),
+    "mbti-new-0.6b": dict(**{**MBTI, "dataset": "mbti-new", "dataset_file": "data/mbti-new", "dataset_repo": "新 MBTI 数据集（DeepSeek 生成）",
+                             "dataset_license": "DeepSeek 生成（开放平台条款 4.2(3) 允许用于训练其他模型）", "max_len": 384},
+                          max_steps=160, eval_every=40,
+                          hypothesis="新数据（核心问题多、无口头禅、人格设定放 system）训练 0.6B：没见过的问题上型贴近度明显高于基座+人设卡，生成不复读、不泄漏设定词，答完会停。"),
+    "mbti-new-1.7b": dict(**{**MBTI, "dataset": "mbti-new", "dataset_file": "data/mbti-new", "dataset_repo": "新 MBTI 数据集（DeepSeek 生成）",
+                             "dataset_license": "DeepSeek 生成（开放平台条款 4.2(3) 允许用于训练其他模型）", "max_len": 384,
+                             "base": "Qwen3-1.7B-Base", "base_repo": "Qwen/Qwen3-1.7B-Base", "batch_size": 4, "grad_accum": 2},
+                          max_steps=160, eval_every=40,
+                          hypothesis="同样的新数据，基座换成 1.7B：没见过的问题上型贴近度和切题度都比 0.6B 高；1.7B 是端侧（RK3576 约 11 tok/s、手机 18–36 tok/s）能流畅运行的主力尺寸。"),
     "mbti-1ep": dict(**MBTI, max_steps=440, eval_every=110,
                      hypothesis="同样的数据只训 1 个 epoch：没见过的问题上的损失和型可分度不比 4 个 epoch 差，背诵率明显更低，回答更切题。"),
 }
@@ -358,7 +367,7 @@ def probe_generate(model, tok, device, prompts, max_new=96):
     model.eval()
     res = []
     for p in prompts:
-        ids = tok.encode(render({"instruction": p["prompt"], "input": ""}, tok, with_answer=False))
+        ids = tok.encode(p["raw"] if p.get("raw") else render({"instruction": p["prompt"], "input": ""}, tok, with_answer=False))
         x = torch.tensor([ids], device=device)
         g = model.generate(x, max_new_tokens=max_new, do_sample=False, pad_token_id=tok.pad_token_id, use_cache=True,
                            eos_token_id=[tok.convert_tokens_to_ids("<|im_end|>"), tok.eos_token_id])
@@ -450,7 +459,7 @@ def run(cfg):
     probes = PROBES + [{"kind": "测试集", "prompt": (e["instruction"] + ("\n" + e["input"] if e["input"].strip() else "")).strip(),
                         "reference": e["output"]} for e in te[:2]]
     if is_mbti:
-        probes = [{"kind": g["gen_type"], "prompt": mbti.make_prompt(g, g["gen_type"], cards), "body": g["body"],
+        probes = [{"kind": g["gen_type"], "prompt": g["body"], "raw": mbti.full_prompt(g, g["gen_type"], cards), "body": g["body"],
                    "reference": g["output"] if g["type"] == g["gen_type"] else ""} for g in gen_rows]
     lineage["destination"] = {
         "adapter": f"runs/{name}/adapter.pt", "note": "只保存 LoRA 的 A、B 矩阵；基座文件不改动。加载 = 基座 + adapter；随时可以关掉 adapter 回到基座。"}
@@ -519,11 +528,10 @@ def run(cfg):
                 ids, lab, att = collate(va_unseen[i:i + 8], tok.pad_token_id, device)
                 lu.append(lm_loss(model, ids, lab, att).item())
         out["val_unseen_loss"] = float(np.mean(lu))
-        out["disc"] = mbti.type_discrimination(model, tok, device, disc_rows, lambda T, r: mbti.make_prompt(r, T, cards))
+        out["disc"] = mbti.type_discrimination(model, tok, device, disc_rows, lambda T, r: mbti.full_prompt(r, T, cards))
         if step == 0:
             # 对照臂：基座 + 人设卡（不用人格标签，把整张卡放在问题前面），只在第 0 步测一次
-            out["disc_card"] = mbti.type_discrimination(model, tok, device, disc_rows,
-                                                        lambda T, r: cards[T] + (mbti.SEP if r.get("fmt") == "card" else "\n\n") + r["body"])
+            out["disc_card"] = mbti.type_discrimination(model, tok, device, disc_rows, lambda T, r: mbti.card_prompt(r, T, cards))
         for g in gens:
             g["memo"] = round(mbti.memo_rate(g["output"], grams), 4)
         rel, rel_mean = mbti.relevance(model, tok, device, [{**g, "body": p["body"]} for g, p in zip(gens, probes)], base_mode)

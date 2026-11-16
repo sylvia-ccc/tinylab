@@ -1,0 +1,188 @@
+{
+ "task": "demo",
+ "reviewer": "张三",
+ "submitted_at": "2026-11-16 07:27:39",
+ "n_items": 12,
+ "ratings": {
+  "q01": {
+   "scores": {
+    "1": {
+     "persona": 5,
+     "relevance": 5,
+     "natural": 5
+    },
+    "2": {
+     "persona": 1,
+     "relevance": 1,
+     "natural": 1
+    }
+   },
+   "best": 1
+  },
+  "q02": {
+   "scores": {
+    "1": {
+     "persona": 5,
+     "relevance": 5,
+     "natural": 5
+    },
+    "2": {
+     "persona": 1,
+     "relevance": 1,
+     "natural": 1
+    }
+   },
+   "best": 1
+  },
+  "q03": {
+   "scores": {
+    "1": {
+     "persona": 5,
+     "relevance": 5,
+     "natural": 5
+    },
+    "2": {
+     "persona": 1,
+     "relevance": 1,
+     "natural": 1
+    }
+   },
+   "best": 1
+  },
+  "q04": {
+   "scores": {
+    "1": {
+     "persona": 5,
+     "relevance": 5,
+     "natural": 5
+    },
+    "2": {
+     "persona": 1,
+     "relevance": 1,
+     "natural": 1
+    }
+   },
+   "best": 1
+  },
+  "q05": {
+   "scores": {
+    "1": {
+     "persona": 1,
+     "relevance": 1,
+     "natural": 1
+    },
+    "2": {
+     "persona": 5,
+     "relevance": 5,
+     "natural": 5
+    }
+   },
+   "best": 2
+  },
+  "q06": {
+   "scores": {
+    "1": {
+     "persona": 1,
+     "relevance": 1,
+     "natural": 1
+    },
+    "2": {
+     "persona": 5,
+     "relevance": 5,
+     "natural": 5
+    }
+   },
+   "best": 2
+  },
+  "q07": {
+   "scores": {
+    "1": {
+     "persona": 5,
+     "relevance": 5,
+     "natural": 5
+    },
+    "2": {
+     "persona": 1,
+     "relevance": 1,
+     "natural": 1
+    }
+   },
+   "best": 1
+  },
+  "q08": {
+   "scores": {
+    "1": {
+     "persona": 1,
+     "relevance": 1,
+     "natural": 1
+    },
+    "2": {
+     "persona": 5,
+     "relevance": 5,
+     "natural": 5
+    }
+   },
+   "best": 2
+  },
+  "q09": {
+   "scores": {
+    "1": {
+     "persona": 1,
+     "relevance": 1,
+     "natural": 1
+    },
+    "2": {
+     "persona": 5,
+     "relevance": 5,
+     "natural": 5
+    }
+   },
+   "best": 2
+  },
+  "q10": {
+   "scores": {
+    "1": {
+     "persona": 1,
+     "relevance": 1,
+     "natural": 1
+    },
+    "2": {
+     "persona": 5,
+     "relevance": 5,
+     "natural": 5
+    }
+   },
+   "best": 2
+  },
+  "q11": {
+   "scores": {
+    "1": {
+     "persona": 1,
+     "relevance": 1,
+     "natural": 1
+    },
+    "2": {
+     "persona": 5,
+     "relevance": 5,
+     "natural": 5
+    }
+   },
+   "best": 2
+  },
+  "q12": {
+   "scores": {
+    "1": {
+     "persona": 1,
+     "relevance": 1,
+     "natural": 1
+    },
+    "2": {
+     "persona": 5,
+     "relevance": 5,
+     "natural": 5
+    }
+   },
+   "best": 2
+  }
+ }
+}
