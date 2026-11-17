@@ -11,11 +11,15 @@
   python scripts/score_blind_review.py review/mbti-final
   python scripts/score_blind_review.py review/_demo/demo --out report.md
   python scripts/score_blind_review.py review/mbti-final --answers a1.json a2.json   # 指定答卷
-同一个评审人（reviewer 字段相同）多次提交时，只取最新一份。
+  python scripts/score_blind_review.py review/mbti-v1-final --invert                 # 1-5 分反转（6-分）
+同一任务里内容完全相同（除 submitted_at 外）的答卷只算一份；
+同一个评审人（reviewer 字段相同）多次提交时，只取最新一份；评审人名字为空时按内容去重（内容不同则各算一人）。
+--invert：把三项分数反转（6-分数），用于修正评审人按"1 分最好"的反方向打分的答卷；"整体最好"的选择不变。
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections import defaultdict
@@ -38,9 +42,15 @@ def fmt(x, nd=2):
 def load_answers(d: Path, files):
     paths = [Path(f) for f in files] if files else sorted(d.glob("answers_*.json"))
     latest = {}  # 评审人 -> (提交时间, 内容)
+    seen = set()
     for p in paths:
         j = json.loads(p.read_text(encoding="utf-8"))
-        who = (j.get("reviewer") or "").strip() or f"匿名:{p.name}"
+        body = {k: v for k, v in j.items() if k != "submitted_at"}
+        h = hashlib.md5(json.dumps(body, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+        if h in seen:          # 内容完全相同（除提交时间）：只算一份
+            continue
+        seen.add(h)
+        who = (j.get("reviewer") or "").strip() or f"匿名:{h[:6]}"
         t = j.get("submitted_at", "") or p.name
         if who not in latest or t >= latest[who][0]:
             latest[who] = (t, j)
@@ -66,6 +76,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("task_dir", type=Path, help="盲评任务目录（含 items.json、key.json）")
     ap.add_argument("--answers", nargs="*", help="指定答卷文件；默认读目录下全部 answers_*.json")
+    ap.add_argument("--invert", action="store_true", help="把 1-5 分反转（6-分数），用于修正按反方向打的答卷")
     ap.add_argument("--out", type=Path, help="同时写入 Markdown 文件")
     a = ap.parse_args()
 
@@ -91,6 +102,8 @@ def main():
             typ = items[iid]["type"]
             for no, s in (r.get("scores") or {}).items():
                 m = order[int(no) - 1]
+                if a.invert:
+                    s = {k: 6 - v for k, v in s.items() if k in dict(DIMS)}
                 vals = [s[k] for k, _ in DIMS if k in s]
                 for k, _ in DIMS:
                     if k in s:
@@ -106,7 +119,9 @@ def main():
                 best_n += 1
 
     L = []
-    L.append(f"# 盲评汇总：{d.name}\n")
+    L.append(f"# 盲评汇总：{d.name}{'（已反转：分数 = 6 - 原分）' if a.invert else ''}\n")
+    if a.invert:
+        L.append("> 注意：本表分数已反转（6 - 原分），用于修正评审人把 1 分当成最好的答卷；\"整体最好\"的选择未改动。\n")
     L.append(f"- 题目数 {len(items)}；评审人 {len(answers)}（{', '.join(answers)}）；参与比较的模型 {len(models)} 个\n")
 
     L.append("## 一、总体\n")

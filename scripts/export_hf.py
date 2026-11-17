@@ -6,7 +6,9 @@
 合并前后在同一批提示上比较 logits，误差写进 export_check.json。
 
   python scripts/export_hf.py sft-alpaca out/qwen3-0.6b-alpaca-zh-sft
+  python scripts/export_hf.py mbti-1.7b-v1 out/xxx --adapter runs/mbti-1.7b-v1/ckpts/adapter_000690.pt   # 指定存档
 """
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -24,8 +26,14 @@ CHATML = ("{% for m in messages %}<|im_start|>{{ m['role'] }}\n{{ m['content'] }
 
 @torch.no_grad()
 def main():
-    run, out = sys.argv[1], Path(sys.argv[2])
-    ad = torch.load(ROOT / "runs" / run / "adapter.pt", map_location="cpu", weights_only=True)
+    ap = argparse.ArgumentParser()
+    ap.add_argument("run")
+    ap.add_argument("out")
+    ap.add_argument("--adapter", default=None, help="可选：指定 adapter 文件（默认 runs/<run>/adapter.pt）")
+    a = ap.parse_args()
+    run, out = a.run, Path(a.out)
+    adapter = Path(a.adapter).resolve() if a.adapter else ROOT / "runs" / run / "adapter.pt"
+    ad = torch.load(adapter, map_location="cpu", weights_only=True)
     c = ad["config"]
     tok = AutoTokenizer.from_pretrained(HUB / c["base"])
     probe = [tok.encode(f"<|im_start|>user\n{q}<|im_end|>\n<|im_start|>assistant\n") for q in
@@ -68,7 +76,7 @@ def main():
     gc.do_sample = False
     gc.save_pretrained(out)
     (out / "export_check.json").write_text(json.dumps({
-        "run": run, "base": c["base"], "lora_r": c["lora_r"], "lora_alpha": c["lora_alpha"], "targets": c["targets"],
+        "run": run, "adapter": str(adapter.relative_to(ROOT)) if adapter.is_relative_to(ROOT) else str(adapter), "base": c["base"], "lora_r": c["lora_r"], "lora_alpha": c["lora_alpha"], "targets": c["targets"],
         "special_tokens": c.get("special_tokens") if ad.get("special") is not None else [],
         "max_abs_logit_diff_fp32": diffs}, ensure_ascii=False, indent=1))
     print("合并前后最大 logit 误差（fp32）：", diffs)

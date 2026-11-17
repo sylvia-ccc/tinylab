@@ -53,7 +53,7 @@ input, select { font: inherit; color: var(--text-primary); background: var(--sur
 .scale { display: flex; gap: 6px; }
 .scale button { flex: 1; min-width: 0; padding: 4px 0; }
 .scale button.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
-.scale-end { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); padding: 0 2px; }
+.scale-end { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); padding: 0 2px; margin: 0 6px 4px calc(9.5em + 16px); }
 .bestrow .scale button.on { background: var(--s3); border-color: var(--s3); }
 .nav { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface-1); border-top: 1px solid var(--border); padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); z-index: 5; }
 .nav > div { max-width: 860px; margin: 0 auto; display: flex; gap: 8px; align-items: center; }
@@ -68,6 +68,7 @@ kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--border); borde
 .tasks small { color: var(--text-secondary); }
 @media (max-width: 560px) {
   .row { grid-template-columns: 1fr; gap: 2px; }
+  .scale-end { margin-left: 6px; }
   .scale button { min-height: 42px; }
   .hint.kb { display: none; }
   .badge { font-size: 20px; }
@@ -106,7 +107,8 @@ const MBTI = {
   ESTP: "爽快、敢行动、活在当下", ESFP: "外向、爱热闹、有感染力"
 };
 const DIMS = [["persona", "像不像这种人格"], ["relevance", "切不切题"], ["natural", "自然不自然"]];
-const ENDS = ["很不像", "很像"];
+// 每项两端的含义：左 = 1 分，右 = 5 分（分数越高越好）
+const ENDS = { persona: ["1 很不像", "5 很像"], relevance: ["1 答非所问", "5 很切题"], natural: ["1 很生硬", "5 很自然"] };
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
@@ -150,6 +152,7 @@ function render() {
   const c1 = el("div", "card"), p = el("div", "persona");
   p.append(el("span", "badge", it.type), el("span", "desc", MBTI[it.type] || "（无说明）"));
   c1.append(p, el("div", "label", "用户说"), el("div", "question", it.question));
+  c1.append(el("div", "hint", "打分说明：三项都是 1–5 分，分数越高越好（5 分最好，1 分最差）。"));
   c1.append(el("div", "hint", `请想象一个 ${it.type} 的朋友会怎么回答，再给下面每个回答打分。`));
   m.append(c1);
 
@@ -171,7 +174,8 @@ function render() {
       row.append(sc5);
       row.onclick = () => { if (cur !== ri) { cur = ri; render(); } };
       card.append(row);
-      if (d === 0) { const e = el("div", "scale-end"); e.append(el("span", null, ENDS[0]), el("span", null, ENDS[1])); /* 仅第一项给出端点提示 */ row.after(e); e.style.gridColumn = "1/-1"; }
+      const e = el("div", "scale-end"); e.append(el("span", null, ENDS[k][0]), el("span", null, ENDS[k][1]));
+      row.after(e);
     });
     m.append(card);
   });
@@ -210,8 +214,22 @@ function setScore(no, k, v) {
 }
 function go(i) { idx = Math.max(0, Math.min(data.items.length - 1, i)); cur = 0; render(); window.scrollTo(0, 0); }
 
+// 一致性检查：把"整体最好"选在本题三项总分最低的回答上（且分数并非全部相同）
+function suspectBest() {
+  const bad = [];
+  data.items.forEach((it, i) => {
+    const r = state.ratings[it.id];
+    if (!r || !r.best || !isDone(it)) return;
+    const tot = it.answers.map((_, a) => DIMS.reduce((t, [k]) => t + r.scores[a + 1][k], 0));
+    const mn = Math.min(...tot);
+    if (tot[r.best - 1] === mn && Math.max(...tot) > mn) bad.push(i + 1);
+  });
+  return bad;
+}
 async function submit() {
   const N = data.items.length, done = doneCount();
+  const sus = suspectBest();
+  if (sus.length && !confirm(`你选的"整体最好"在这题分数最低，是不是把 1 分当成了最好？\n（分数越高越好：5 分最好，1 分最差。）\n涉及第 ${sus.join("、")} 题。\n\n点"确定"继续提交，点"取消"回去检查。`)) { go(sus[0] - 1); return; }
   if (done < N && !confirm(`还有 ${N - done} 题没有完整打分，仍要提交吗？（未完成的题会按已填部分保存）`)) return;
   const old = document.querySelector(".msg"); if (old) old.remove();
   const box = el("div", "msg", "提交中…"); $("main").prepend(box); window.scrollTo(0, 0);
