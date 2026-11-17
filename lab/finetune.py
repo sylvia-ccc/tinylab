@@ -57,7 +57,7 @@ FT_DEFAULTS = dict(
     lr=2e-4, min_lr=2e-5, warmup=20, weight_decay=0.0, grad_clip=1.0,
     batch_size=4, grad_accum=2, max_steps=300, eval_every=30, log_every=5, seed=42,
     hypothesis="", notes="",
-    unseen_group_frac=0.1, seen_val_frac=0.08, disc_per_type=3, n_gen=12,
+    unseen_group_frac=0.1, seen_val_frac=0.08, disc_per_type=3, n_gen=12, save_every_eval=False,
 )
 
 MBTI = dict(dataset="mbti-v6", dataset_repo="你自己的 v6 训练集", dataset_file="mbti-v6",
@@ -481,7 +481,16 @@ def run(cfg):
     }, ensure_ascii=False, indent=1))
     rec.status(state="running", phase="训练", n_params=n_base, device=device)
 
+    def save_adapter(path):
+        torch.save({"lora": {f"{li}.{t}": {"A": m.A.detach().cpu(), "B": m.B.detach().cpu()} for li, t, m in hits},
+                    "special": special.D.detach().cpu() if special is not None else None,
+                    "config": {k: c[k] for k in ("base", "lora_r", "lora_alpha", "targets", "train_special_tokens", "special_tokens")}}, path)
+
     def checkpoint_eval(step):
+        if c.get("save_every_eval") and step > 0:
+            # 每次评估都存一份 adapter：训练结束后可以按"没见过的问题"上的指标回头挑最好的一步
+            (d / "ckpts").mkdir(exist_ok=True)
+            save_adapter(d / "ckpts" / f"adapter_{step:06d}.pt")
         if device == "mps":
             torch.mps.empty_cache()
         ev = evaluate(model, hits, tok, va, gen_sets, kl_prompts, device, c)
@@ -583,9 +592,7 @@ def run(cfg):
             rec.status(step=step, elapsed=round(now - t0, 1))
             if not math.isfinite(loss_sum):
                 rec.status(state="failed", error="loss 变成 NaN：训练发散"); return
-    torch.save({"lora": {f"{li}.{t}": {"A": m.A.detach().cpu(), "B": m.B.detach().cpu()} for li, t, m in hits},
-                "special": special.D.detach().cpu() if special is not None else None,
-                "config": {k: c[k] for k in ("base", "lora_r", "lora_alpha", "targets", "train_special_tokens", "special_tokens")}}, d / "adapter.pt")
+    save_adapter(d / "adapter.pt")
     s = json.loads((d / "status.json").read_text())
     if s.get("state") != "stopped":
         rec.status(state="done", step=c["max_steps"], phase="完成", elapsed=round(time.time() - t0, 1),

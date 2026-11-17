@@ -31,6 +31,7 @@ def main():
     ap.add_argument("files", nargs="+")
     ap.add_argument("--report")
     ap.add_argument("--pilot", action="store_true")
+    ap.add_argument("--npc", action="store_true", help="游戏 NPC 数据：不查场景配额和安全占比，回答长度按 20–100 字")
     a = ap.parse_args()
     rows, bad_json = [], []
     for f in a.files:
@@ -93,23 +94,37 @@ def main():
     add("同一 q_id 场景一致", not mixed, f"{len(mixed)} 个 q_id 被标了不同场景", mixed)
 
     # 场景配额
+    if a.npc:
+        miss = [r["id"] for r in rows if not (r.get("npc") or {}).get("role")]
+        add("NPC 角色字段", not miss, f"{len(miss)} 条缺 npc.role", miss)
+        roles = {(r.get("npc") or {}).get("role") for r in rows}
+        cover = collections.defaultdict(set)
+        for r in rows:
+            cover[r["type"]].add((r.get("npc") or {}).get("role"))
+        add("各人格覆盖的 NPC 情境数", min(len(cover.get(t, ())) for t in TYPES) >= 3,
+            f"{len(roles)} 个情境；每种人格至少出现在 3 个情境里才算通过；最少的：" +
+            ", ".join(f"{t}:{len(cover.get(t, ()))}" for t in sorted(TYPES, key=lambda t: len(cover.get(t, ())))[:4]))
     sc = collections.Counter(firsts and qs[q][0]["scene"] for q in qs)
     unknown = [s for s in sc if s not in SCENES]
     need_s = 3 if a.pilot else 40
     short = [f"{s}:{sc.get(s, 0)}" for s in SCENES if sc.get(s, 0) < need_s]
-    add("场景配额", not short and not unknown, f"每类核心问题要求 ≥ {need_s}；不足：{', '.join(short) or '无'}；未知场景：{', '.join(unknown) or '无'}")
+    if not a.npc:
+      add("场景配额", not short and not unknown, f"每类核心问题要求 ≥ {need_s}；不足：{', '.join(short) or '无'}；未知场景：{', '.join(unknown) or '无'}")
     safe = sum(r["scene"] == "安全类" for r in rows) / len(rows)
-    add("安全类占比", 0.04 <= safe <= 0.09, f"{100 * safe:.1f}%（要求 4–9%）")
+    if not a.npc:
+        add("安全类占比", 0.04 <= safe <= 0.09, f"{100 * safe:.1f}%（要求 4–9%）")
 
     # 多轮
     multi = sum(len(r["messages"]) > 2 for r in rows) / len(rows)
-    add("多轮对话占比", 0.25 <= multi <= 0.35, f"{100 * multi:.1f}%（要求 25–35%）", warn=a.pilot)
+    lo_m, hi_m = (0.05, 0.2) if a.npc else (0.25, 0.35)
+    add("多轮对话占比", lo_m <= multi <= hi_m, f"{100 * multi:.1f}%（要求 {100 * lo_m:.0f}–{100 * hi_m:.0f}%）", warn=a.pilot)
 
     # 回答层面
     answers = [(r, x["content"]) for r in rows for x in r["messages"] if x["role"] == "assistant"]
     lens = [len(t) for _, t in answers]
-    out_len = [t[:40] for _, t in answers if not 40 <= len(t) <= 150]
-    add("回答长度 40–150 字", len(out_len) / len(answers) <= 0.05,
+    lo_, hi_ = (20, 100) if a.npc else (40, 150)
+    out_len = [t[:40] for _, t in answers if not lo_ <= len(t) <= hi_]
+    add(f"回答长度 {lo_}–{hi_} 字", len(out_len) / len(answers) <= 0.05,
         f"{len(out_len)}/{len(answers)} 条超出范围（要求 ≤ 5%）；中位数 {sorted(lens)[len(lens) // 2]} 字", out_len)
     hits = []
     for r, t in answers:
