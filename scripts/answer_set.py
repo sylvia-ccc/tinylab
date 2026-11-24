@@ -171,14 +171,15 @@ def load_model(a: dict, device: str, dtype):
         c = ad["config"]
         base = HUB / c["base"]
         tok = AutoTokenizer.from_pretrained(base)
-        model = AutoModelForCausalLM.from_pretrained(base, dtype=torch.float32)
+        big = "4B" in c["base"] or "8B" in c["base"]  # 大模型 fp32 加载会占满 24GB 内存，改为 bf16 加载、fp32 计算增量后写回
+        model = AutoModelForCausalLM.from_pretrained(base, dtype=torch.bfloat16 if big else torch.float32)
         with torch.no_grad():  # 与 scripts/export_hf.py 相同的合并：W += (alpha/r)·B·A；特殊标记嵌入行 += D
             scale = c["lora_alpha"] / c["lora_r"]
             for key, w in ad["lora"].items():
                 li, t = key.split(".")
                 layer = model.model.layers[int(li)]
                 mod = getattr(layer.self_attn, t, None) or getattr(layer.mlp, t)
-                mod.weight += scale * (w["B"] @ w["A"])
+                mod.weight.copy_((mod.weight.float() + scale * (w["B"] @ w["A"])).to(mod.weight.dtype))
             if ad.get("special") is not None:
                 assert model.config.tie_word_embeddings, "这里假设嵌入与输出层共享"
                 ids = torch.tensor([tok.convert_tokens_to_ids(t) for t in c["special_tokens"]])
@@ -218,7 +219,7 @@ def generate_batch(model, tok, prompts: list[str], args, device: str, seed: int)
     enc = tok(prompts, return_tensors="pt", padding=True, add_special_tokens=False).to(device)
     torch.manual_seed(seed)
     with torch.no_grad():
-        out = model.generate(**enc, do_sample=True, temperature=0.7, top_p=0.9, top_k=0,
+        out = model.generate(**enc, do_sample=args.temperature > 0, temperature=args.temperature or None, top_p=args.top_p if args.temperature > 0 else None, top_k=0,
                              max_new_tokens=args.max_new, eos_token_id=stop_ids,
                              pad_token_id=stop_ids[1], logits_processor=LogitsProcessorList([make_rep_penalty(1.1, exempt)]))
     res = []
@@ -254,7 +255,10 @@ def run_answerer(a: dict, units: list[dict], args, cache_dir: Path) -> dict[str,
     # 长度相近的放一批，减少补齐浪费
     def prompt_of(u):
         system = (CARDS / f"{u['type']}.txt").read_text(encoding="utf-8").strip() if a["kind"] == "card" else sys_text(u["type"])
-        return render_chat(system, u["messages"])
+        pr = render_chat(system, u["messages"])
+        if a["kind"] == "card" and "Base" not in a["path"].name:  # Qwen3 对话版：空思考块 = 关闭思考模式
+            pr += "<think>\n\n</think>\n\n"
+        return pr
     todo.sort(key=lambda u: len(prompt_of(u)))
     for bi in range(0, len(todo), args.batch_size):
         batch = todo[bi:bi + args.batch_size]
@@ -280,6 +284,8 @@ def main():
     ap.add_argument("--out", type=Path, required=True, help="输出 JSONL")
     ap.add_argument("--device", default="cpu", choices=["cpu", "mps", "cuda"], help="默认 cpu，不和训练抢 GPU")
     ap.add_argument("--seed", type=int, default=20261116, help="人格分配和生成共用的随机种子")
+    ap.add_argument("--temperature", type=float, default=0.7, help="采样温度；0 = 贪心")
+    ap.add_argument("--top-p", type=float, default=0.9)
     ap.add_argument("--max-new", type=int, default=200, help="最多生成的新 token 数")
     ap.add_argument("--batch-size", type=int, default=8)
     ap.add_argument("--threads", type=int, default=4, help="cpu 线程数")

@@ -57,7 +57,7 @@ FT_DEFAULTS = dict(
     lr=2e-4, min_lr=2e-5, warmup=20, weight_decay=0.0, grad_clip=1.0,
     batch_size=4, grad_accum=2, max_steps=300, eval_every=30, log_every=5, seed=42,
     hypothesis="", notes="",
-    unseen_group_frac=0.1, seen_val_frac=0.08, disc_per_type=3, n_gen=12, save_every_eval=False,
+    unseen_group_frac=0.1, seen_val_frac=0.08, disc_per_type=3, n_gen=12, save_every_eval=False, oversample_safety=1,
 )
 
 MBTI = dict(dataset="mbti-v6", dataset_repo="你自己的 v6 训练集", dataset_file="mbti-v6",

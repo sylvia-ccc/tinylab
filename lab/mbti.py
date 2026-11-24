@@ -235,6 +235,8 @@ def build_data_chat(c, tok, hub, root):
     for p in files:
         rs = [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
         srcs.append({"file": str(p.relative_to(root)), "rows": len(rs), "sha256": _sha(p), "bytes": p.stat().st_size})
+        for r in rs:
+            r["_src"] = p.name
         raw += rs
     gens = sorted({r.get("generator", "未填写") for r in raw})
     lin["source"] = {"repo": "新生成的 MBTI 数据集（按 docs/mbti-data-spec.md）", "url": "",
@@ -250,7 +252,7 @@ def build_data_chat(c, tok, hub, root):
     for r in raw:
         m = r["messages"]
         for k in range(1, len(m), 2):
-            rows.append({"type": r["type"], "group": r["q_id"], "scene": r.get("scene"), "fmt": "chat",
+            rows.append({"type": r["type"], "group": r["q_id"], "scene": r.get("scene"), "fmt": "chat", "src": r.get("_src", ""),
                          "multi": len(m) > 2, "_ctx": m[:k], "body": m[0]["content"] if len(m) == 2 else m[k - 1]["content"],
                          "instruction": m[k - 1]["content"], "input": "", "output": m[k]["content"]})
     stage("多轮按回答拆开", "每段多轮对话里的每一条 assistant 回答都单独成为一条训练样本（前面的对话作为上下文）", len(rows))
@@ -266,6 +268,12 @@ def build_data_chat(c, tok, hub, root):
     rng.shuffle(seen); rng.shuffle(unseen)
     n_vs = round(len(seen) * c["seen_val_frac"])
     va_seen, tr = seen[:n_vs], seen[n_vs:]
+    k = int(c.get("oversample_safety", 1))
+    if k > 1:
+        extra = [r for r in tr if "safety" in r.get("src", "")]
+        tr = tr + extra * (k - 1)
+        rng.shuffle(tr)
+        stage(f"安全数据加权 ×{k}", f"安全补充数据（文件名含 safety）在训练里重复 {k} 遍：多出 {len(extra) * (k - 1)} 条，加重模型对安全回应的学习", len(tr))
     stage("按核心问题（q_id）整组留出", f"{len(groups)} 个核心问题，留出 {n_unseen} 个（{round(100 * c['unseen_group_frac'])}%）训练中从不出现", len(seen))
     tr_g = {r["group"] for r in tr}
     stage("切分：训练 / 验证（见过的问题）/ 验证（没见过的问题）",

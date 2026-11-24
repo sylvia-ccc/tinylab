@@ -4,3 +4,4 @@ numpy
 pyarrow
 huggingface_hub
 safetensors
+sentencepiece

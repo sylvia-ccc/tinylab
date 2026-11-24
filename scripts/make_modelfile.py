@@ -28,7 +28,7 @@ def build(gguf: str, system: str | None = None) -> str:
     lines += [
         'PARAMETER stop "<|im_end|>"',
         'PARAMETER stop "<|endoftext|>"',
-        "PARAMETER temperature 0.7",
+        "PARAMETER temperature 0.3",  # AI 盲评：0.3 比 0.7 均分 2.60 对 2.18（results/final_q200/ai_review_decode.md）
         "PARAMETER top_p 0.9",
         "PARAMETER repeat_penalty 1.1",
         "",

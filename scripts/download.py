@@ -2,6 +2,7 @@
 
   python scripts/download.py            # Qwen3-0.6B-Base（约 1.2GB）+ alpaca-zh（约 21MB）
   python scripts/download.py --qwen3-1.7b   # 另外下载 Qwen3-1.7B-Base（约 3.4GB）
+  python scripts/download.py --extra Qwen/Qwen3-1.7B Qwen/Qwen3-4B-Base   # 只下载指定的额外模型
 """
 import argparse
 from pathlib import Path
@@ -14,7 +15,13 @@ HUB = Path(__file__).resolve().parent.parent / "data" / "hub"
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--qwen3-1.7b", action="store_true", dest="q17")
+    ap.add_argument("--extra", nargs="*", default=None, help="只下载这些 Qwen 官方仓库")
     a = ap.parse_args()
+    if a.extra:
+        for repo in a.extra:
+            snapshot_download(repo, local_dir=HUB / repo.split("/")[1],
+                              allow_patterns=["*.json", "*.safetensors", "*.txt", "LICENSE", "README.md"])
+        return
     models = ["Qwen/Qwen3-0.6B-Base"] + (["Qwen/Qwen3-1.7B-Base"] if a.q17 else [])
     for repo in models:
         snapshot_download(repo, local_dir=HUB / repo.split("/")[1],

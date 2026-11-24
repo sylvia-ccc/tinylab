@@ -7,7 +7,7 @@
   - 其他：正常调用模型
 
 用法：
-  python scripts/chat_demo.py                                  # 交互；默认 tinylab-mbti-1.7b-v1-q4 + INTJ
+  python scripts/chat_demo.py                                  # 交互；默认 tinylab-mbti-4b-v5-q4 + INTJ
   python scripts/chat_demo.py --type ENFP --hotline "心理援助热线 xxx-xxxx"
   python scripts/chat_demo.py --script cases.txt               # 无人值守：每行一句用户消息，空行 = /reset
 聊天中的命令：/type ENFP 切换人格（同时清空上下文）· /reset 清空上下文 · /quit 退出
@@ -26,7 +26,7 @@ from lab.safety_gate import SafetyGate  # noqa: E402
 
 TYPES = [a + b + c + d for a in "EI" for b in "NS" for c in "TF" for d in "JP"]
 MAX_TURNS = 10                       # 最多保留最近 10 轮（一问一答 = 1 轮）
-OPTIONS = {"temperature": 0.7, "top_p": 0.9, "repeat_penalty": 1.1}
+OPTIONS = {"temperature": 0.3, "top_p": 0.9, "repeat_penalty": 1.1}
 GRAY, RESET = "\033[90m", "\033[0m"
 
 
@@ -51,6 +51,29 @@ def stream_chat(host: str, model: str, messages: list[dict], out=sys.stdout) -> 
                 full.append(piece)
                 out.write(piece)
                 out.flush()
+            if j.get("done"):
+                break
+    return "".join(full)
+
+
+def stream_prefill(host: str, model: str, messages: list[dict], prefill: str, out=sys.stdout) -> str:
+    """身份问题：用 raw 模式拼 ChatML，让回答强制以 prefill 开头，再由模型接着说。"""
+    prompt = "".join(f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n" for m in messages)
+    prompt += "<|im_start|>assistant\n" + prefill
+    out.write(prefill); out.flush()
+    body = json.dumps({"model": model, "prompt": prompt, "raw": True, "stream": True, "options": OPTIONS}).encode()
+    req = urllib.request.Request(host.rstrip("/") + "/api/generate", data=body, headers={"Content-Type": "application/json"})
+    full = [prefill]
+    with urllib.request.urlopen(req, timeout=300) as r:
+        for line in r:
+            if not line.strip():
+                continue
+            j = json.loads(line)
+            if j.get("error"):
+                raise RuntimeError(j["error"])
+            piece = j.get("response", "")
+            if piece:
+                full.append(piece); out.write(piece); out.flush()
             if j.get("done"):
                 break
     return "".join(full)
@@ -89,14 +112,18 @@ class Chat:
                 system += "\n" + g["system_hint"]
                 print(f"{GRAY}[身份提示已加入 system：{g['reason']}]{RESET}")
             print("AI> ", end="", flush=True)
-            reply = stream_chat(self.a.host, self.a.model, [{"role": "system", "content": system}] + msgs)
+            full = [{"role": "system", "content": system}] + msgs
+            if g["kind"] == "identity" and g.get("assistant_prefill"):
+                reply = stream_prefill(self.a.host, self.a.model, full, g["assistant_prefill"])
+            else:
+                reply = stream_chat(self.a.host, self.a.model, full)
             print()
         self.history = (msgs + [{"role": "assistant", "content": reply}])[-2 * MAX_TURNS:]
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--model", default="tinylab-mbti-1.7b-v1-q4")
+    ap.add_argument("--model", default="tinylab-mbti-4b-v5-q4")
     ap.add_argument("--type", default="INTJ", type=str.upper, choices=TYPES, metavar="TYPE", help="16 型之一，默认 INTJ")
     ap.add_argument("--hotline", default="当地的心理援助热线或急救电话", help="危机话术里的热线文案")
     ap.add_argument("--host", default="http://127.0.0.1:11434", help="ollama 地址")
