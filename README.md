@@ -1,6 +1,8 @@
 # TinyLab · 看得见的模型训练实验室
 
-> **English summary.** TinyLab is a single-machine lab for *seeing* what happens while a language model trains. It covers (1) training small GPTs from scratch with full observability (per-layer gradients, update ratios, attention maps, residual norms, dead neurons, embedding PCA), (2) real LoRA fine-tuning of open base models (Qwen3) with data lineage, a per-layer change map, forgetting/KL tracking and before/after chat, and (3) a judge-free evaluation toolkit for persona fine-tuning, used to diagnose why a 7B persona model degraded. Everything runs on an Apple-silicon laptop. All experiments, including the failed ones, are documented in [`docs/experiments/`](docs/experiments/).
+> **English summary.** Model weights: [Hugging Face](https://huggingface.co/sylviacccyu/tinylab-persona-chat-4b-gguf). TinyLab is a single-machine lab for *seeing* what happens while a language model trains. It covers (1) training small GPTs from scratch with full observability (per-layer gradients, update ratios, attention maps, residual norms, dead neurons, embedding PCA), (2) real LoRA fine-tuning of open base models (Qwen3) with data lineage, a per-layer change map, forgetting/KL tracking and before/after chat, and (3) a judge-free evaluation toolkit for persona fine-tuning, used to diagnose why a 7B persona model degraded. Everything runs on an Apple-silicon laptop. All experiments, including the failed ones, are documented in [`docs/experiments/`](docs/experiments/).
+
+**模型下载（Hugging Face）：** [sylviacccyu/tinylab-persona-chat-4b-gguf](https://huggingface.co/sylviacccyu/tinylab-persona-chat-4b-gguf)：4B 人格口吻对话模型（GGUF Q4_K_M，2.5 GB，ollama / llama.cpp 可直接运行），模型卡含评测数字、安全闸用法与局限。
 
 在一台苹果芯片笔记本上训练语言模型，并且**看见训练过程中的每一件事**：数据从哪来、变成了什么、模型哪里被改了、改完有什么影响。所有实验（包括失败的）都写成了带数据的报告。
 
